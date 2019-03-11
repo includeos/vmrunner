@@ -11,21 +11,20 @@ import argparse
 import subprocess
 import re
 
-INCLUDEOS_PREFIX = None
-default_prefix = "/usr/local/includeos"
+INCLUDEOS_VMRUNNER = None
 
-# Locate IncludeOS installation
-if "INCLUDEOS_PREFIX" not in os.environ:
-    INCLUDEOS_PREFIX = default_prefix
-else:
-    INCLUDEOS_PREFIX = os.environ['INCLUDEOS_PREFIX']
-
-if not os.path.isdir(INCLUDEOS_PREFIX):
-    print "Couldn't find IncludeOS installation. If you installed to a non-default location (e.g. not " + default_prefix + ") please set the environment variable INCLUDEOS_PREFIX to point to this location."
+# Locate vmrunner installation
+if "INCLUDEOS_VMRUNNER" not in os.environ or not os.path.isdir(os.environ['INCLUDEOS_VMRUNNER']):
+    errmsg="""
+    Couldn't find vmrunner installation. Please set the environment variable
+    INCLUDEOS_VMRUNNER to point to this location (if your using conan virtualenv
+    this should have been done for you)
+    """
+    print(errmsg)
     sys.exit(0)
 
 # Location of vmrunner
-sys.path.append(INCLUDEOS_PREFIX+'/tools')
+sys.path.append(os.environ["INCLUDEOS_VMRUNNER"])
 
 from vmrunner.prettify import color
 
@@ -160,10 +159,13 @@ hyper_name = "qemu"
 if args.solo5:
     hyper_name = "solo5"
     os.environ['PLATFORM'] = "x86_solo5"
-    solo5_hvt = INCLUDEOS_PREFIX + "/x86_64/bin/solo5-hvt"
+
+    # We expect these to be added to path now, e.g. by conan virtualenv
+    solo5_hvt  = "solo5-hvt"
+    solo5_ifup = "solo5-ifup.sh"
 
     subprocess.call(['chmod', '+x', solo5_hvt])
-    subprocess.call(['sudo', INCLUDEOS_PREFIX + "/scripts/solo5-ifup.sh" ])
+    subprocess.call(['sudo', solo5_ifup])
 
 vm = vmrunner.add_vm(config = config, hyper_name = hyper_name)
 
@@ -182,7 +184,7 @@ if (args.debug):
 
 if args.bridge:
     print INFO, "Creating bridge"
-    subprocess.call(INCLUDEOS_PREFIX + "/scripts/create_bridge.sh", shell=True)
+    subprocess.call("create_bridge.sh", shell=True)
 
 # If the binary name is a folder, such as ".", build the service
 if os.path.isdir(image_name):
@@ -207,7 +209,7 @@ if (args.grub or args.grub_reuse):
     if args.grub_reuse:
         opts += "-u "
 
-    subprocess.call(INCLUDEOS_PREFIX + "/scripts/grubify.sh " + opts + image_name, shell=True)
+    subprocess.call("grubify.sh " + opts + image_name, shell=True)
     image_name = image_name + ".grub.img"
     has_bootloader = True
 
