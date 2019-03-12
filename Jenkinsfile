@@ -13,7 +13,7 @@ pipeline {
     CPUS = """${sh(returnStdout: true, script: 'nproc')}"""
     CC = 'clang-6.0'
     CXX = 'clang++-6.0'
-    PACKAGE = 'microlb'
+    PACKAGE = 'vmrunner'
     USER = 'includeos'
     CHAN = 'test'
   }
