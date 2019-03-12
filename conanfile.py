@@ -41,7 +41,7 @@ class VmrunnerConan(ConanFile):
         self.copy("*", dst="bin", src="scripts")        
 
     def package_info(self):
-        self.env_info.INCLUDEOS_VMRUNNER=self.package_folder
+        self.env_info.PYTHONPATH.append(self.package_folder)
         self.env_info.path.append((os.path.join(self.package_folder, "bin")))
         
     def deploy(self):
