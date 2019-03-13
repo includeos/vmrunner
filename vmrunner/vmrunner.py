@@ -14,23 +14,16 @@ from shutil import copyfile
 
 from prettify import color
 
-INCLUDEOS_HOME = None
-
-if "INCLUDEOS_PREFIX" not in os.environ:
-    def_home = "/usr/local"
-    print color.WARNING("WARNING:"), "Environment variable INCLUDEOS_PREFIX is not set. Trying default", def_home
-    if not os.path.isdir(def_home): raise Exception("Couldn't find INCLUDEOS_PREFIX")
-    INCLUDEOS_HOME= def_home
-else:
-    INCLUDEOS_HOME = os.environ['INCLUDEOS_PREFIX']
-
 package_path = os.path.dirname(os.path.realpath(__file__))
 
-default_config = INCLUDEOS_HOME + "/tools/vmrunner/vm.default.json"
+#TODO CHECK AND VERIFY
+INCLUDEOS_VMRUNNER = os.environ['INCLUDEOS_VMRUNNER']
+
+default_config = INCLUDEOS_VMRUNNER  + "/vmrunner/vm.vanilla.json"
 
 default_json = "./vm.json"
-
-chainloader = INCLUDEOS_HOME + "/bin/chainloader"
+#TODO check and verify only when needed
+chainloader = os.environ['INCLUDEOS_CHAINLOADER'] + "/chainloader"
 
 # Provide a list of VM's with validated specs
 # (One default vm added at the end)
@@ -232,7 +225,7 @@ class solo5(hypervisor):
     def boot(self, multiboot, debug=False, kernel_args = "", image_name = None):
         self._stopped = False
 
-        qkvm_bin = INCLUDEOS_HOME + "/x86_64/bin/solo5-hvt"
+        qkvm_bin ="solo5-hvt"
 
         # Use provided image name if set, otherwise raise an execption
         if not image_name:
@@ -383,8 +376,8 @@ class qemu(hypervisor):
             qemu_ifup = scripts + "qemu-ifup"
             qemu_ifdown = scripts + "qemu-ifdown"
         else:
-            qemu_ifup = INCLUDEOS_HOME + "/scripts/qemu-ifup"
-            qemu_ifdown = INCLUDEOS_HOME + "/scripts/qemu-ifdown"
+            qemu_ifup = INCLUDEOS_VMRUNNER + "/bin/qemu-ifup"
+            qemu_ifdown = INCLUDEOS_VMRUNNER + "/bin/qemu-ifdown"
 
         # FIXME: this needs to get removed, e.g. fetched from the schema
         names = {"virtio" : "virtio-net", "vmxnet" : "vmxnet3", "vmxnet3" : "vmxnet3"}
@@ -796,12 +789,13 @@ class vm:
         print INFO, "Building with cmake (%s)" % args
         # install dir:
         INSTDIR = os.getcwd()
-
+        #TODO FIX THIS
         if (not os.path.isfile("CMakeLists.txt") and os.path.isfile("service.cpp")):
             # No makefile present. Copy the one from seed, inform user and pray.
             # copyfile will throw errors if it encounters any.
-            copyfile(INCLUDEOS_HOME + "/seed/service/CMakeLists.txt", "CMakeLists.txt")
-            print INFO, "No CMakeList.txt present. File copied from seed. Please adapt to your needs."
+            #copyfile(INCLUDEOS_HOME + "/seed/service/CMakeLists.txt", "CMakeLists.txt")
+            #print INFO, "No CMakeList.txt present. File copied from seed. Please adapt to your needs."
+            print INFO , "Fail"
 
         # create build directory
         try:
