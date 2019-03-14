@@ -11,21 +11,6 @@ import argparse
 import subprocess
 import re
 
-INCLUDEOS_VMRUNNER = None
-
-# Locate vmrunner installation
-if "INCLUDEOS_VMRUNNER" not in os.environ or not os.path.isdir(os.environ['INCLUDEOS_VMRUNNER']):
-    errmsg="""
-    Couldn't find vmrunner installation. Please set the environment variable
-    INCLUDEOS_VMRUNNER to point to this location (if your using conan virtualenv
-    this should have been done for you)
-    """
-    print(errmsg)
-    sys.exit(0)
-
-# Location of vmrunner
-sys.path.append(os.environ["INCLUDEOS_VMRUNNER"])
-
 from vmrunner.prettify import color
 
 
