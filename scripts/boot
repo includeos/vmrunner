@@ -24,12 +24,6 @@ parser.add_argument("-c", "--clean", dest="clean", action="store_true",
 parser.add_argument("-b", "--build", dest="build", action="store_true", default=False,
                     help="Only build the service, don't start it in a VM")
 
-parser.add_argument("--drivers", dest="list_drivers", action="store_true", default=False,
-                    help="List all available drivers")
-
-parser.add_argument("--plugins", dest="list_plugins", action="store_true", default=False,
-                    help="List all available plugins")
-
 parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", default=False,
                     help="Verbose output when building")
 
@@ -78,34 +72,6 @@ if (args.verbose):
 # Avoid the verbose var to hang around next run
 elif "VERBOSE" in os.environ:
     del os.environ["VERBOSE"]
-
-## list of drivers by processing library filenames
-if (args.list_drivers):
-    if "ARCH" not in os.environ:
-        ARCH = "x86_64"
-    else:
-        ARCH = os.environ["ARCH"]
-    FLD = INCLUDEOS_PREFIX + "/" + ARCH + "/drivers"
-    print "Listing drivers from " + FLD + "..."
-    for file in os.listdir(FLD):
-        m = re.search('.*lib(.*)\.a', file)
-        line = "=> " + m.group(1) + "\t (" + file + ")"
-        print line.expandtabs(20)
-    exit(0)
-
-## list of plugins by processing library filenames
-if (args.list_plugins):
-    if "ARCH" not in os.environ:
-        ARCH = "x86_64"
-    else:
-        ARCH = os.environ["ARCH"]
-    FLD = INCLUDEOS_PREFIX + "/" + ARCH + "/plugins"
-    print "Listing plugins from " + FLD + "..."
-    for file in os.listdir(FLD):
-        m = re.search('.*lib(.*)\.a', file)
-        line = "=> " + m.group(1) + "\t (" + file + ")"
-        print line.expandtabs(20)
-    exit(0)
 
 
 # Note: importing vmrunner will make it start looking for VM's
