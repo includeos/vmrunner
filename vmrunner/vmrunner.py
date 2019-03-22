@@ -1,7 +1,17 @@
+#!/usr/bin/env python3
+
+from __future__ import print_function
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import hex
+from builtins import chr
+from builtins import str
+from builtins import object
 import os
 import sys
 import subprocess
-import thread
+import _thread
 import threading
 import time
 import re
@@ -12,7 +22,7 @@ import signal
 import psutil
 from shutil import copyfile
 
-from prettify import color
+from .prettify import color
 
 package_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -34,7 +44,7 @@ nametag = "<VMRunner>"
 INFO = color.INFO(nametag)
 VERB = bool(os.environ["VERBOSE"]) if "VERBOSE" in os.environ else False
 
-class Logger:
+class Logger(object):
     def __init__(self, tag):
         self.tag = tag
         if (VERB):
@@ -46,10 +56,10 @@ class Logger:
         self.info(args)
 
     def info_verb(self, args):
-        print self.tag,
+        print(self.tag, end=' ')
         for arg in args:
-            print arg,
-        print
+            print(arg, end=' ')
+        print()
 
     def info_silent(self, args):
         pass
@@ -105,7 +115,7 @@ exit_codes = {"SUCCESS" : 0,
 }
 
 def get_exit_code_name (exit_code):
-    for name, code in exit_codes.iteritems():
+    for name, code in exit_codes.items():
         if code == exit_code: return name
     return "UNKNOWN ERROR"
 
@@ -131,7 +141,7 @@ def have_sudo():
 def cmd(cmdlist):
     res = subprocess.check_output(cmdlist)
     for line in res.rstrip().split("\n"):
-        print color.SUBPROC(line)
+        print(color.SUBPROC(line))
 
 def abstract():
     raise Exception("Abstract class method called. Use a subclass")
@@ -176,7 +186,7 @@ class hypervisor(object):
     def start_process(self, cmdlist):
 
         if cmdlist[0] == "sudo": # and have_sudo():
-            print color.WARNING("Running with sudo")
+            print(color.WARNING("Running with sudo"))
             self._sudo = True
 
         # Start a subprocess
@@ -480,16 +490,16 @@ class qemu(hypervisor):
 
             if is_Elf64(image_name):
                 info ("Found 64-bit ELF, need chainloader" )
-                print "Looking for chainloader: "
-                print "Found", chainloader, "Type: ",  file_type(chainloader)
+                print("Looking for chainloader: ")
+                print("Found", chainloader, "Type: ",  file_type(chainloader))
                 if not is_Elf32(chainloader):
-                    print color.WARNING("Chainloader doesn't seem to be a 32-bit ELF executable")
+                    print(color.WARNING("Chainloader doesn't seem to be a 32-bit ELF executable"))
                 kernel_args = ["-kernel", chainloader, "-append", kernel_args, "-initrd", image_name + " " + kernel_args]
             elif is_Elf32(image_name):
                 info ("Found 32-bit elf, trying direct boot")
                 kernel_args = ["-kernel", image_name, "-append", kernel_args]
             else:
-                print color.WARNING("Provided kernel is neither 64-bit or 32-bit ELF executable.")
+                print(color.WARNING("Provided kernel is neither 64-bit or 32-bit ELF executable."))
                 kernel_args = ["-kernel", image_name, "-append", kernel_args]
 
             info ( "Booting", image_name, "directly without bootloader (multiboot / -kernel args)")
@@ -583,7 +593,7 @@ class qemu(hypervisor):
             self.start_process(command)
             self.info("Started process PID ",self._proc.pid)
         except Exception as e:
-            print self.INFO,"Starting subprocess threw exception:", e
+            print(self.INFO,"Starting subprocess threw exception:", e)
             raise e
 
     def stop(self):
@@ -652,7 +662,7 @@ class qemu(hypervisor):
         return self._proc.poll()
 
 # VM class
-class vm:
+class vm(object):
 
     def __init__(self, config = None, hyper_name = "qemu"):
 
@@ -661,7 +671,7 @@ class vm:
         self._exit_complete = False
 
         self._config = load_with_default_config(True, config)
-        self._on_success = lambda(line) : self.exit(exit_codes["SUCCESS"], nametag + " All tests passed")
+        self._on_success = lambda line : self.exit(exit_codes["SUCCESS"], nametag + " All tests passed")
         self._on_panic =  self.panic
         self._on_timeout = self.timeout
         self._on_output = {
@@ -730,7 +740,7 @@ class vm:
                 info("Calling on_exit_success")
                 self._on_exit_success()
 
-            print color.SUCCESS(msg)
+            print(color.SUCCESS(msg))
             self._exit_complete = True
             return
 
@@ -739,7 +749,7 @@ class vm:
 
     # Default timeout event
     def timeout(self):
-        if VERB: print color.INFO("<timeout>"), "VM timed out"
+        if VERB: print(color.INFO("<timeout>"), "VM timed out")
 
         # Note: we have to stop the VM since the main thread is blocking on vm.readline
         self._exit_status = exit_codes["TIMEOUT"]
@@ -750,10 +760,10 @@ class vm:
     def panic(self, panic_line):
         panic_reason = self._hyper.readline()
         info("VM signalled PANIC. Reading until EOT (", hex(ord(EOT)), ")")
-        print color.VM(panic_reason),
+        print(color.VM(panic_reason), end=' ')
         remaining_output = self._hyper.read_until_EOT()
         for line in remaining_output.split("\n"):
-            print color.VM(line)
+            print(color.VM(line))
 
         self.exit(exit_codes["VM_PANIC"], panic_reason)
 
@@ -765,13 +775,13 @@ class vm:
 
     def on_success(self, callback, do_exit = True):
         if do_exit:
-            self._on_output["SUCCESS"] = lambda(line) : [callback(line), self._on_success(line)]
+            self._on_output["SUCCESS"] = lambda line : [callback(line), self._on_success(line)]
         else: self._on_output["SUCCESS"] = callback
         return self
 
     def on_panic(self, callback, do_exit = True):
         if do_exit:
-            self._on_output[panic_signature] = lambda(line) : [callback(line), self._on_panic(line)]
+            self._on_output[panic_signature] = lambda line : [callback(line), self._on_panic(line)]
         else: self._on_output[panic_signature] = callback
         return self
 
@@ -797,7 +807,7 @@ class vm:
 
     # Make using GNU Make
     def make(self, params = []):
-        print INFO, "Building with 'make' (params=" + str(params) + ")"
+        print(INFO, "Building with 'make' (params=" + str(params) + ")")
         jobs = os.environ["num_jobs"].split(" ") if "num_jobs" in os.environ else ["-j4"]
         make = ["make"] + jobs
         make.extend(params)
@@ -806,7 +816,7 @@ class vm:
 
     # Call cmake
     def cmake(self, args = []):
-        print INFO, "Building with cmake (%s)" % args
+        print(INFO, "Building with cmake (%s)" % args)
         # install dir:
         INSTDIR = os.getcwd()
         #TODO FIX THIS
@@ -815,7 +825,7 @@ class vm:
             # copyfile will throw errors if it encounters any.
             #copyfile(INCLUDEOS_HOME + "/seed/service/CMakeLists.txt", "CMakeLists.txt")
             #print INFO, "No CMakeList.txt present. File copied from seed. Please adapt to your needs."
-            print INFO , "Fail"
+            print(INFO , "Fail")
 
         # create build directory
         try:
@@ -839,12 +849,12 @@ class vm:
 
             return self.make()
         except Exception as e:
-            print "Exception while building: ", e
+            print("Exception while building: ", e)
             self.exit(exit_codes["BUILD_FAIL"], "building with cmake failed")
 
     # Clean cmake build folder
     def clean(self):
-        print INFO, "Cleaning cmake build folder"
+        print(INFO, "Cleaning cmake build folder")
         subprocess.call(["rm","-rf","build"])
         return self
 
@@ -868,13 +878,13 @@ class vm:
 
     def trigger_event(self, line):
         # Find any callback triggered by this line
-        for pattern, func in self._on_output.iteritems():
+        for pattern, func in self._on_output.items():
             if re.search(pattern, line):
                 try:
                     # Call it
                     res = func(line)
                 except Exception as err:
-                    print color.WARNING("Exception raised in event callback: ")
+                    print(color.WARNING("Exception raised in event callback: "))
                     print_exception()
                     res = False
                     self.stop()
@@ -903,7 +913,7 @@ class vm:
         try:
             self._hyper.boot(multiboot, debug, kernel_args, image_name)
         except Exception as err:
-            print color.WARNING("Exception raised while booting: ")
+            print(color.WARNING("Exception raised while booting: "))
             print_exception()
             if (timeout): self._timer.cancel()
             self.exit(exit_codes["BOOT_FAILED"], str(err))
@@ -914,11 +924,11 @@ class vm:
             try:
                 line = self._hyper.readline()
             except Exception as e:
-                print color.WARNING("Exception thrown while waiting for vm output")
+                print(color.WARNING("Exception thrown while waiting for vm output"))
                 break
 
             if line and self.find_exit_status(line) == None:
-                    print color.VM(line.rstrip())
+                    print(color.VM(line.rstrip()))
                     self.trigger_event(line)
 
             # Empty line - should only happen if process exited
@@ -942,12 +952,12 @@ class vm:
 
                 # Print stderr if exit status wasnt 0
                 if err and self.poll() != 0:
-                    print color.WARNING("Stderr: \n" + err)
+                    print(color.WARNING("Stderr: \n" + err))
 
                 # Parse the last output from vm
                 lines = data.split("\n")
                 for line in lines:
-                    print color.VM(line)
+                    print(color.VM(line))
                     self.find_exit_status(line)
                     # Note: keep going. Might find panic after service exit
 
@@ -982,7 +992,7 @@ def load_with_default_config(use_default, path = default_json):
             return user_conf
         else:
             # extend (override) default config with user config
-            for key, value in user_conf.iteritems():
+            for key, value in user_conf.items():
                 conf[key] = value
             info(str(conf))
             return conf
@@ -1025,7 +1035,7 @@ def load_config(path):
             program_exit(73, "No valid config files in " + path)
 
 
-    if config.has_key("description"):
+    if "description" in config:
         description = config["description"]
     else:
         description = str(config)
@@ -1046,9 +1056,9 @@ def program_exit(status, msg):
 
     # Print status message and exit with appropriate code
     if (status):
-        print color.EXIT_ERROR(get_exit_code_name(status), msg)
+        print(color.EXIT_ERROR(get_exit_code_name(status), msg))
     else:
-        print color.SUCCESS(msg)
+        print(color.SUCCESS(msg))
 
     sys.exit(status)
 
@@ -1061,12 +1071,12 @@ def add_vm(**kwargs):
 
 # Handler for signals
 def handler(signum, frame):
-    print color.WARNING("Process interrupted - stopping vms")
+    print(color.WARNING("Process interrupted - stopping vms"))
     for vm in vms:
         try:
             vm.exit(exit_codes["ABORT"], "Process terminated by user")
         except Exception as e:
-            print color.WARNING("Forced shutdown caused exception: "), e
+            print(color.WARNING("Forced shutdown caused exception: "), e)
             raise e
 
 
