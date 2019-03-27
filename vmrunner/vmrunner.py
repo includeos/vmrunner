@@ -17,11 +17,11 @@ import time
 import re
 import linecache
 import traceback
-import validate_vm
 import signal
 import psutil
 from shutil import copyfile
 
+import vmrunner.validate_vm as validate_vm
 from .prettify import color
 
 package_path = os.path.dirname(os.path.realpath(__file__))
@@ -87,7 +87,7 @@ def info(*args):
 def file_type(filename):
     p = subprocess.Popen(['file',filename],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     output, errors = p.communicate()
-    return output
+    return output.decode("utf-8")
 
 def is_Elf64(filename):
     magic = file_type(filename)
@@ -318,7 +318,7 @@ class solo5(hypervisor):
     def readline(self):
         if self._proc.poll():
             raise Exception("Process completed")
-        return self._proc.stdout.readline()
+        return self._proc.stdout.readline().decode("utf-8")
 
 
     def writeline(self, line):
@@ -650,7 +650,7 @@ class qemu(hypervisor):
     def readline(self):
         if self._proc.poll():
             raise Exception("Process completed")
-        return self._proc.stdout.readline()
+        return self._proc.stdout.readline().decode("utf-8")
 
 
     def writeline(self, line):
@@ -799,7 +799,7 @@ class vm(object):
 
     # Read a line from the VM's standard out
     def readline(self):
-        return self._hyper.readline()
+        return self._hyper.readline().decode("utf-8")
 
     # Write a line to VM stdout
     def writeline(self, line):
@@ -879,7 +879,7 @@ class vm(object):
     def trigger_event(self, line):
         # Find any callback triggered by this line
         for pattern, func in self._on_output.items():
-            if re.search(pattern, line):
+            if re.search(pattern, str(line)):
                 try:
                     # Call it
                     res = func(line)
