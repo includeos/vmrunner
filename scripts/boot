@@ -1,9 +1,5 @@
-#!/bin/sh
-# -*- mode: python -*-
-
-''''which python2 >/dev/null 2>&1 && exec python2 "$0" "$@" # '''
-''''which python  >/dev/null 2>&1 && exec python  "$0" "$@" # '''
-''''exec echo "Error: I can't find python anywhere"         # '''
+#!/usr/bin/env python
+from __future__ import print_function
 
 import os
 import sys
@@ -12,7 +8,6 @@ import subprocess
 import re
 
 from vmrunner.prettify import color
-
 
 # Argparse
 parser = argparse.ArgumentParser(
@@ -68,7 +63,7 @@ VERB = False
 if (args.verbose):
     os.environ["VERBOSE"] = "1"
     VERB = True
-    print INFO, "VERBOSE mode set for environment"
+    print(INFO, "VERBOSE mode set for environment")
 # Avoid the verbose var to hang around next run
 elif "VERBOSE" in os.environ:
     del os.environ["VERBOSE"]
@@ -84,7 +79,7 @@ has_bootloader = False
 # File extensions we assume to be bootable images, not just a kernel
 image_extensions = [".img", ".raw"]
 
-if VERB: print INFO , "Args to pass to VM: ", args.vmargs
+if VERB: print(INFO , "Args to pass to VM: ", args.vmargs)
 # path w/name of VM image to run
 image_name = args.vm_location
 
@@ -92,22 +87,22 @@ image_name = args.vm_location
 # then initialize stuff ...
 if (os.path.isdir(args.vm_location)):
     image_name = os.path.abspath(args.vm_location)
-    if VERB: print INFO, "Changing directory to  " + image_name
+    if VERB: print(INFO, "Changing directory to  " + image_name)
     os.chdir(os.path.abspath(args.vm_location))
 
 
 if len(vmrunner.vms) < 1:
     # This should never happen - there should always be a default
-    print color.FAIL("No vm object found in vmrunner - nothing to boot")
+    print(color.FAIL("No vm object found in vmrunner - nothing to boot"))
     exit(-1)
 
 if VERB:
-    print INFO, len(vmrunner.vms), "VM initialized. Commencing build- and boot..."
+    print(INFO, len(vmrunner.vms), "VM initialized. Commencing build- and boot...")
 
 config = None
 if args.config:
     config = os.path.abspath(args.config)
-    if VERB: print INFO, "Using config file", config
+    if VERB: print(INFO, "Using config file", config)
 
 hyper_name = "qemu"
 if args.solo5_hvt:
@@ -129,20 +124,20 @@ elif args.solo5_spt:
 vm = vmrunner.add_vm(config = config, hyper_name = hyper_name)
 
 # Don't listen to events needed by testrunner
-vm.on_success(lambda(x): None, do_exit = False)
-vm.on_panic(lambda(x): None, do_exit = False)
+vm.on_success(lambda x: None, do_exit = False)
+vm.on_panic(lambda x: None, do_exit = False)
 
 file_extension = os.path.splitext(args.vm_location)[1]
 
 if args.clean:
-    print INFO, "Cleaning build"
+    print(INFO, "Cleaning build")
     vm.clean()
 
 if (args.debug):
-    print INFO, "Booting in debug mode"
+    print(INFO, "Booting in debug mode")
 
 if args.bridge:
-    print INFO, "Creating bridge"
+    print(INFO, "Creating bridge")
     subprocess.call("create_bridge.sh", shell=True)
 
 # If the binary name is a folder, such as ".", build the service
@@ -152,17 +147,17 @@ if os.path.isdir(image_name):
     image_name = open("binary.txt", 'r').read()
 
 elif file_extension in image_extensions:
-    if VERB: print INFO, "File extension recognized as bootable image"
+    if VERB: print(INFO, "File extension recognized as bootable image")
     has_bootloader = True
 
 elif not file_extension:
-    if VERB: print INFO, "No file extension. Trying to boot as kernel"
+    if VERB: print(INFO, "No file extension. Trying to boot as kernel")
 
 else:
-    if VERB: print INFO, "Unrecognized file extension. Trying to boot as kernel"
+    if VERB: print(INFO, "Unrecognized file extension. Trying to boot as kernel")
 
 if (args.grub or args.grub_reuse):
-    print INFO, "Creating GRUB image from ", args.vm_location
+    print(INFO, "Creating GRUB image from ", args.vm_location)
     opts = ""
 
     if args.grub_reuse:

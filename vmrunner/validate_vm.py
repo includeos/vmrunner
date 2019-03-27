@@ -1,4 +1,6 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
+from __future__ import print_function
+from builtins import str
 from jsonschema import Draft4Validator, validators
 
 # Make the validator fill in defaults from the schema
@@ -8,7 +10,7 @@ def extend_with_default(validator_class):
     validate_properties = validator_class.VALIDATORS["properties"]
 
     def set_defaults(validator, properties, instance, schema):
-        for property, subschema in properties.iteritems():
+        for property, subschema in properties.items():
             if "default" in subschema:
                 instance.setdefault(property, subschema["default"])
 
@@ -73,18 +75,18 @@ def load_config(path, verbose = verbose):
 
     # For several JSON-files, return the ones conforming to VM-schema
     for json in jsons:
-        if verbose: print"\t*Validating ", json, ": ",
+        if verbose: print("\t*Validating ", json, ": ", end=' ')
         try:
             spec = validate_vm_spec(json)
             valid_vms.append(spec)
-            if verbose: print "OK"
+            if verbose: print("OK")
         except Exception as e:
-            if verbose: print "FAIL " + str(e)
+            if verbose: print("FAIL " + str(e))
     return valid_vms
 
 
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else "."
     if not load_config(path):
-        print "No valid config found"
+        print("No valid config found")
         exit(-1)
