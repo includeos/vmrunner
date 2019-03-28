@@ -639,7 +639,7 @@ class qemu(hypervisor):
         chars = ""
 
         while (not self._proc.poll()):
-            char = self._proc.stdout.read(1)
+            char = self._proc.stdout.read(1).decode("utf-8")
             if char == chr(4):
                 return chars
             chars += char
@@ -799,7 +799,7 @@ class vm(object):
 
     # Read a line from the VM's standard out
     def readline(self):
-        return self._hyper.readline().decode("utf-8")
+        return self._hyper.readline()
 
     # Write a line to VM stdout
     def writeline(self, line):
