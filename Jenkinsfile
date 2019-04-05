@@ -1,6 +1,5 @@
 pipeline {
   agent { label 'ubuntu-18.04' }
-  triggers { upstream( upstreamProjects: 'IncludeOS/IncludeOS/master, IncludeOS/IncludeOS/dev', threshold: hudson.model.Result.SUCCESS ) }
   options { checkoutToSubdirectory('src') }
   environment {
     CONAN_USER_HOME = "${env.WORKSPACE}"
@@ -29,9 +28,9 @@ pipeline {
       }
     }
     stage('Upload to bintray') {
+      when { branch 'master' }
       parallel {
         stage('Latest release') {
-          when { branch 'master' }
           steps {
             upload_package("$CHAN_LATEST")
           }
