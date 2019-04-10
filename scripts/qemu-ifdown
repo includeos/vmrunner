@@ -3,23 +3,31 @@
 # Simple tap-networking for IncludeOS on Qemu
 # ==============================================================================
 
-# The name of the bridge VM's are added to
+# Mac still only supports ifconfig, not iproute2
+if uname -s | grep Darwin > /dev/null 2>&1; then
+  on_mac=true
+fi
 
-[ -z $INCLUDEOS_BRIDGE ] && INCLUDEOS_BRIDGE="bridge43"
-BRIDGE=$INCLUDEOS_BRIDGE
-    
+# The name of the bridge VMs are added to
+BRIDGE=${INCLUDEOS_BRIDGE:-"bridge43"}
+
+# ==============================================================================
+# Bringing down the tap interface: (qemu keeps track of n)
+# ==============================================================================
+
 if [ -n "$1" ];then
-    
+  if [ $on_mac ]; then
     ifconfig $1 down
+  else
+    ip link set $1 down
+  fi
 
-    if uname -s | grep Darwin > /dev/null 2>&1; then
-        ifconfig $BRIDGE deletem $1
-    else
-        brctl delif $BRIDGE $1
-    fi
-    exit 0
-
+  if [ $on_mac ]; then
+    ifconfig $BRIDGE deletem $1
+  else
+    ip link delete dev $1
+  fi
 else
-    echo "Error: no interface specified"
-    exit 1
+  echo "Error: no interface specified" >&2
+  exit 1
 fi

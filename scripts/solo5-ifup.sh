@@ -38,7 +38,7 @@ Linux)
         echo "Creating tap100 for solo5 tender"
         ip tuntap add tap100 mode tap
         ip link set dev tap100 up
-        brctl addif $BRIDGE tap100
+        ip link set tap100 master $BRIDGE
     fi
     ;;
 FreeBSD)
