@@ -583,11 +583,19 @@ class qemu(hypervisor):
 
         # TODO: sudo is only required for tap networking and kvm. Check for those.
         command = ["sudo", qemu_binary]
-        if self._kvm_present: command.extend(["--enable-kvm"])
+        if self._kvm_present:
+            command.extend(["--enable-kvm"])
 
         # If hvf is present, use it and enable cpu features (needed for rdrand/rdseed)
         if self.hvf_present():
-            command.extend(["-accel","hvf","-cpu","host"])
+            command.extend(["-accel","hvf"])
+
+        # Set -cpu correctly if not specified in config
+        if not "cpu" in self._config:
+            if self._kvm_present:
+                command.extend(["-cpu","kvm64,+rdrand,+rdseed"])
+            if self.hvf_present():
+                command.extend(["-cpu","host"])
 
         command += kernel_args
         command += disk_args + debug_args + net_args + mem_arg + mod_args
