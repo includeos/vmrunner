@@ -20,7 +20,7 @@ class VmrunnerConan(ConanFile):
 
     def package(self):
         self.copy("*", dst="vmrunner", src="vmrunner")
-        self.copy("*", dst="bin", src="scripts")
+        self.copy("*", dst="bin", src="bin")
 
     def package_info(self):
         self.env_info.PYTHONPATH.append(self.package_folder)
