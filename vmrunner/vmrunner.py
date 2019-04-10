@@ -597,6 +597,11 @@ class qemu(hypervisor):
             if self.hvf_present():
                 command.extend(["-cpu","host"])
 
+        # Warn if no hardware acceleration
+        if not (self.hvf_present() or self._kvm_present):
+            print(color.WARNING("Hardware acceleration not detected. Will attempt to boot anyway.") )
+            time.sleep(1)
+
         command += kernel_args
         command += disk_args + debug_args + net_args + mem_arg + mod_args
         command += vga_arg + trace_arg + pci_arg
