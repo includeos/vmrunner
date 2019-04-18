@@ -320,7 +320,7 @@ class solo5(hypervisor):
     def readline(self):
         if self._proc.poll():
             raise Exception("Process completed")
-        return self._proc.stdout.readline().decode("utf-8")
+        return self._proc.stdout.readline().decode("utf-8", errors="replace")
 
 
     def writeline(self, line):
@@ -662,7 +662,7 @@ class qemu(hypervisor):
         chars = ""
 
         while (not self._proc.poll()):
-            char = self._proc.stdout.read(1).decode("utf-8")
+            char = self._proc.stdout.read(1).decode("utf-8", errors="replace")
             if char == chr(4):
                 return chars
             chars += char
@@ -673,7 +673,7 @@ class qemu(hypervisor):
     def readline(self):
         if self._proc.poll():
             raise Exception("Process completed")
-        return self._proc.stdout.readline().decode("utf-8")
+        return self._proc.stdout.readline().decode("utf-8", errors="replace")
 
 
     def writeline(self, line):
@@ -947,7 +947,7 @@ class vm(object):
             try:
                 line = self._hyper.readline()
             except Exception as e:
-                print(color.WARNING("Exception thrown while waiting for vm output"))
+                print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
                 break
 
             if line and self.find_exit_status(line) == None:
