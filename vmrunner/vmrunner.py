@@ -113,7 +113,8 @@ exit_codes = {"SUCCESS" : 0,
               "ABORT" : 70,
               "VM_EOT" : 71,
               "BOOT_FAILED": 72,
-              "PARSE_ERROR": 73
+              "PARSE_ERROR": 73,
+              "UNSAFE": 74
 }
 
 def get_exit_code_name (exit_code):
@@ -695,10 +696,12 @@ class vm(object):
 
         self._config = load_with_default_config(True, config)
         self._on_success = lambda line : self.exit(exit_codes["SUCCESS"], nametag + " All tests passed")
+        self._on_unsafe = lambda line : self.exit(exit_codes["UNSAFE"], nametag + " Not fit for production")
         self._on_panic =  self.panic
         self._on_timeout = self.timeout
         self._on_output = {
             panic_signature : self._on_panic,
+            "FATAL: Random source check failed" : self._on_unsafe,
             "SUCCESS" : self._on_success }
 
         if hyper_name == "solo5":
