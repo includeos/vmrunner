@@ -28,7 +28,11 @@ pipeline {
       }
     }
     stage('Upload to bintray') {
-      when { branch 'master' }
+      when { anyOf {
+        branch 'master'
+        buildingTag()
+        }
+      }
       parallel {
         stage('Latest release') {
           steps {
