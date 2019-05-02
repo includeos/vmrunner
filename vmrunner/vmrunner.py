@@ -87,7 +87,7 @@ def info(*args):
 
 
 def file_type(filename):
-    p = subprocess.Popen(['file',filename],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    p = subprocess.Popen(['file',filename],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
     output, errors = p.communicate()
     return output.decode("utf-8")
 
@@ -194,7 +194,7 @@ class hypervisor(object):
         # Start a subprocess
         self._proc = subprocess.Popen(cmdlist,
                                       stdout = subprocess.PIPE,
-                                      stderr = subprocess.PIPE,
+                                      stderr = subprocess.STDOUT,
                                       stdin = subprocess.PIPE)
 
         return self._proc
