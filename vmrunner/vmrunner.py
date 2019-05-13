@@ -109,7 +109,6 @@ exit_codes = {"SUCCESS" : 0,
               "TIMEOUT" : 66,
               "VM_PANIC" : 67,
               "CALLBACK_FAILED" : 68,
-              "BUILD_FAIL" : 69,
               "ABORT" : 70,
               "VM_EOT" : 71,
               "BOOT_FAILED": 72,
@@ -720,10 +719,28 @@ class vm(object):
         self._kvm_present = False
 
     def stop(self):
+        self.flush()
         self._hyper.stop().wait()
         if self._timer:
             self._timer.cancel()
         return self
+
+    def flush(self):
+        while self._exit_status == None and self.poll() == None:
+
+                try:
+                    line = self._hyper.readline()
+                except Exception as e:
+                    print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
+                    break
+
+                if line and self.find_exit_status(line) == None:
+                        print(color.VM(line.rstrip()))
+                        self.trigger_event(line)
+
+                # Empty line - should only happen if process exited
+                else: pass
+
 
     def wait(self):
         if hasattr(self, "_timer") and self._timer:
@@ -831,59 +848,6 @@ class vm(object):
     def writeline(self, line):
         return self._hyper.writeline(line)
 
-    # Make using GNU Make
-    def make(self, params = []):
-        print(INFO, "Building with 'make' (params=" + str(params) + ")")
-        jobs = os.environ["num_jobs"].split(" ") if "num_jobs" in os.environ else ["-j4"]
-        make = ["make"] + jobs
-        make.extend(params)
-        cmd(make)
-        return self
-
-    # Call cmake
-    def cmake(self, args = []):
-        print(INFO, "Building with cmake (%s)" % args)
-        # install dir:
-        INSTDIR = os.getcwd()
-        #TODO FIX THIS
-        if (not os.path.isfile("CMakeLists.txt") and os.path.isfile("service.cpp")):
-            # No makefile present. Copy the one from seed, inform user and pray.
-            # copyfile will throw errors if it encounters any.
-            #copyfile(INCLUDEOS_HOME + "/seed/service/CMakeLists.txt", "CMakeLists.txt")
-            #print INFO, "No CMakeList.txt present. File copied from seed. Please adapt to your needs."
-            print(INFO , "Fail")
-
-        # create build directory
-        try:
-            os.makedirs("build")
-        except OSError as err:
-            if err.errno!=17: # Errno 17: File exists
-                self.exit(exit_codes["BUILD_FAIL"], "could not create build directory")
-
-        # go into build directory
-        # NOTE: The test gets run from here
-        os.chdir("build")
-
-        # build with prefix = original path
-        cmake = ["cmake", "..", "-DCMAKE_INSTALL_PREFIX:PATH=" + INSTDIR]
-        cmake.extend(args)
-
-        try:
-            cmd(cmake)
-
-            # if everything went well, build with make and install
-
-            return self.make()
-        except Exception as e:
-            print("Exception while building: ", e)
-            self.exit(exit_codes["BUILD_FAIL"], "building with cmake failed")
-
-    # Clean cmake build folder
-    def clean(self):
-        print(INFO, "Cleaning cmake build folder")
-        subprocess.call(["rm","-rf","build"])
-        return self
-
     def find_exit_status(self, line):
 
         # Kernel reports service exit status
@@ -900,7 +864,6 @@ class vm(object):
             return self._exit_status
 
         return None
-
 
     def trigger_event(self, line):
         # Find any callback triggered by this line

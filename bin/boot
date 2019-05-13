@@ -11,16 +11,10 @@ from vmrunner.prettify import color
 
 # Argparse
 parser = argparse.ArgumentParser(
-  description="Boot - Build and run IncludeOS services")
-
-parser.add_argument("-c", "--clean", dest="clean", action="store_true",
-                    help="Clean previous build before building")
-
-parser.add_argument("-b", "--build", dest="build", action="store_true", default=False,
-                    help="Only build the service, don't start it in a VM")
+  description="Boot - Run IncludeOS services")
 
 parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", default=False,
-                    help="Verbose output when building")
+                    help="Verbose output")
 
 parser.add_argument("--create-bridge", dest="bridge", action="store_true",
                     help="Create bridge43, used in local testing when TAP devices are supported")
@@ -97,7 +91,7 @@ if len(vmrunner.vms) < 1:
     exit(-1)
 
 if VERB:
-    print(INFO, len(vmrunner.vms), "VM initialized. Commencing build- and boot...")
+    print(INFO, len(vmrunner.vms), "VM initialized. Commencing boot...")
 
 config = None
 if args.config:
@@ -129,22 +123,12 @@ vm.on_panic(lambda x: None, do_exit = False)
 
 file_extension = os.path.splitext(args.vm_location)[1]
 
-if args.clean:
-    print(INFO, "Cleaning build")
-    vm.clean()
-
 if (args.debug):
     print(INFO, "Booting in debug mode")
 
 if args.bridge:
     print(INFO, "Creating bridge")
     subprocess.call("create_bridge.sh", shell=True)
-
-# If the binary name is a folder, such as ".", build the service
-if os.path.isdir(image_name):
-    vm.cmake()
-    # also, set image name to
-    image_name = open("binary.txt", 'r').read()
 
 elif file_extension in image_extensions:
     if VERB: print(INFO, "File extension recognized as bootable image")
@@ -166,9 +150,6 @@ if (args.grub or args.grub_reuse):
     subprocess.call("grubify.sh " + opts + image_name, shell=True)
     image_name = image_name + ".grub.img"
     has_bootloader = True
-
-# Skip starting a VM if we are only building
-if (args.build): exit(0);
 
 if (not has_bootloader):
     vm.boot(timeout = None, multiboot = True, debug = args.debug, kernel_args = " ".join(args.vmargs), image_name = image_name)
