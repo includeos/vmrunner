@@ -177,13 +177,6 @@ if (args.grub or args.grub_reuse):
 
     has_bootloader = True
 
-<<<<<<< HEAD
-=======
-# Skip starting a VM if we are only building
-if (args.build): exit(0);
-
-
->>>>>>> 2eb876f (boot: More error handling, expect grub image at cwd)
 if (not has_bootloader):
     vm.boot(timeout = None, multiboot = True, debug = args.debug, kernel_args = " ".join(args.vmargs), image_name = image_name)
 else:
