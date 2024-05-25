@@ -35,7 +35,12 @@ default_config = INCLUDEOS_VMRUNNER  + "/vmrunner/vm.vanilla.json"
 
 default_json = "./vm.json"
 #TODO check and verify only when needed
-chainloader = os.environ['INCLUDEOS_CHAINLOADER'] + "/chainloader"
+chainloader = os.environ.get('INCLUDEOS_CHAINLOADER')
+
+if chainloader:
+    chainloader = chainloader + "/chainloader"
+else:
+    chainloader = None
 
 # Provide a list of VM's with validated specs
 # (One default vm added at the end)
@@ -497,6 +502,10 @@ class qemu(hypervisor):
             if is_Elf64(image_name):
                 info ("Found 64-bit ELF, need chainloader" )
                 print("Looking for chainloader: ")
+                if chainloader == None or not os.path.isfile(chainloader):
+                    print(f"Error: couldn't find chainloader. Try -g for grub, or create an .img with vmbuild.")
+                    sys.exit(1)
+
                 print("Found", chainloader, "Type: ",  file_type(chainloader))
                 if not is_Elf32(chainloader):
                     print(color.WARNING("Chainloader doesn't seem to be a 32-bit ELF executable"))
