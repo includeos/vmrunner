@@ -5,9 +5,16 @@ import os
 import sys
 import argparse
 import subprocess
+import shutil
 import re
 
 from vmrunner.prettify import color
+
+# Get the path to INCLUDEOS_VMRUNNER from the environment variable
+includeos_vmrunner = os.environ.get('INCLUDEOS_VMRUNNER')
+if not includeos_vmrunner:
+    print("Error: INCLUDEOS_VMRUNNER environment variable is not set.")
+    sys.exit(1)
 
 # Argparse
 parser = argparse.ArgumentParser(
@@ -123,6 +130,9 @@ vm.on_panic(lambda x: None, do_exit = False)
 
 file_extension = os.path.splitext(args.vm_location)[1]
 
+def is_executable(file_path):
+    return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
+
 if (args.debug):
     print(INFO, "Booting in debug mode")
 
@@ -147,10 +157,33 @@ if (args.grub or args.grub_reuse):
     if args.grub_reuse:
         opts += "-u "
 
-    subprocess.call("grubify.sh " + opts + image_name, shell=True)
-    image_name = image_name + ".grub.img"
+    grubify_script = shutil.which("grubify.sh")
+    if not grubify_script:
+        print(f"Error: {grubify_script} not found or not executable.")
+        sys.exit(1)
+
+    if not os.access('.', os.W_OK):
+        print("Error: Cannot write to the current directory.")
+        sys.exit(1)
+
+    subprocess.call(grubify_script + " " + opts + image_name, shell=True)
+
+    base_image_name = os.path.basename(image_name)
+    image_name = os.path.join(os.getcwd(), base_image_name + ".grub.img")
+
+    if not os.path.exists(image_name):
+        print(f"Error: {image_name} does not exist.")
+        sys.exit(1)
+
     has_bootloader = True
 
+<<<<<<< HEAD
+=======
+# Skip starting a VM if we are only building
+if (args.build): exit(0);
+
+
+>>>>>>> 2eb876f (boot: More error handling, expect grub image at cwd)
 if (not has_bootloader):
     vm.boot(timeout = None, multiboot = True, debug = args.debug, kernel_args = " ".join(args.vmargs), image_name = image_name)
 else:
