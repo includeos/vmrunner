@@ -1,7 +1,7 @@
 # vmrunner
-Utilities for booting [IncludeOS](https://github.com/includeos/includeos) binaries
+Utilities for booting [IncludeOS](https://github.com/includeos/includeos) binaries - _for testing and development only_. 
 
-- `vmrunner.py` - a convenience wrapper around qemu, integrated with IncludeOS tools
+- `vmrunner.py` - a convenience wrapper around qemu, used by IncludeOS integration tests
 - `boot`        - a command line tool using vmrunner.py, that boots IncludeOS binaries with qemu
 - `grubify.sh`  - a script to create a bootable grub image from an IncludeOS binary
 
