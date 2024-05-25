@@ -46,7 +46,7 @@ shift $((OPTIND-1))
 [[ $1 ]] || usage
 
 KERNEL=$1
-DISK=${DISK-$KERNEL.grub.img}
+DISK=$(basename ${DISK-$KERNEL.grub.img})
 MOUNTDIR=${MOUNTDIR-/mnt}
 MOUNT_OPTS="rw"
 
