@@ -53,7 +53,7 @@ args = parser.parse_args()
 
 
 # Pretty printing from this command
-nametag = "<boot>"
+nametag = "<boot>    "
 INFO = color.INFO(nametag)
 
 # Override VM output prepension
@@ -68,7 +68,6 @@ if (args.verbose):
 # Avoid the verbose var to hang around next run
 elif "VERBOSE" in os.environ:
     del os.environ["VERBOSE"]
-
 
 # Note: importing vmrunner will make it start looking for VM's
 # vmrunner also relies on the verbose env var to be set on initialization
@@ -141,14 +140,14 @@ if args.bridge:
     subprocess.call("create_bridge.sh", shell=True)
 
 elif file_extension in image_extensions:
-    if VERB: print(INFO, "File extension recognized as bootable image")
+    if VERB: print(INFO, f"File extension '{file_extension}' recognized as bootable image")
     has_bootloader = True
 
 elif not file_extension:
     if VERB: print(INFO, "No file extension. Trying to boot as kernel")
 
 else:
-    if VERB: print(INFO, "Unrecognized file extension. Trying to boot as kernel")
+    if VERB: print(INFO, f"Unrecognized file extension '{file_extension}'. Trying to boot as kernel")
 
 if (args.grub or args.grub_reuse):
     print(INFO, "Creating GRUB image from ", args.vm_location)
