@@ -6,7 +6,6 @@ import sys
 import argparse
 import subprocess
 import shutil
-import re
 
 from vmrunner.prettify import color
 
