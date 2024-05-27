@@ -714,18 +714,15 @@ class qemu(hypervisor):
             SeaBIOS_end = "\x1b[H\x1b[J\x1b[1;1H"
 
             # Trim the start sequence if present
-            if SeaBIOS_start in line:
+            if SeaBIOS_start + "SeaBIOS" in line:
                 line = line.split(SeaBIOS_start, 1)[-1]
                 if self._reboots > 0:
                     print(color.WARNING(f"Reboot detected, #{self._reboots}"))
                 self._reboots += 1
 
-
-            # Trim the end sequence if present
+            # Trim the end sequence (it's on its own line, so remove the whole thing)
             if SeaBIOS_end in line:
                 line = ""
-
-
 
             return line
 
@@ -787,6 +784,7 @@ class vm(object):
 
     def __init__(self, config = None, hyper_name = "qemu"):
 
+        self._stopping = False
         self._exit_status = None
         self._exit_msg = ""
         self._exit_complete = False
@@ -816,7 +814,7 @@ class vm(object):
         self._root = os.getcwd()
         self._kvm_present = False
 
-    def stop(self):
+    def stop(self, signal = None):
         self.flush()
         self._hyper.stop().wait()
         if self._timer:
@@ -829,7 +827,11 @@ class vm(object):
                 try:
                     line = self._hyper.readline()
                 except Exception as e:
-                    print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
+                    # We might be blocked on self._hyper.readline() when a signal handler tells us to stop
+                    # because it stops us by sending sigterm to the parent process and all children.
+                    # In that case an exception is expected, but not otherwise.
+                    if signal == None:
+                        print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
                     break
 
                 if line and self.find_exit_status(line) == None:
@@ -1139,7 +1141,7 @@ def program_exit(status, msg):
     info("Stopping all vms")
 
     for vm in vms:
-        vm.stop().wait()
+        vm.stop(status).wait()
 
     # Print status message and exit with appropriate code
     if (status):
