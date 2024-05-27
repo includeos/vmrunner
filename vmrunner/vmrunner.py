@@ -822,6 +822,9 @@ class vm(object):
         return self
 
     def flush(self):
+        if self._hyper._proc == None:
+            return
+        
         while self._exit_status == None and self.poll() == None:
 
                 try:
