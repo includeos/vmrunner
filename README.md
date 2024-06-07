@@ -23,6 +23,9 @@ $ export PATH=$INCLUDEOS_VMRUNNER/bin:$PATH
 
 # To make python3 from your venv be the first python, which will then start boot
 $ export PATH=$INCLUDEOS_VMRUNNER/venv/bin:$PATH
+
+# To make the vmrunner.py module globally available to boot 
+$ export PYTHONPATH=$INCLUDEOS_VMRUNNER
 ```
 If you've built a chainloader, boot might be faster as it can use qemu's `-kernel` argument and not spend time building a grub filesystem.
 ```
