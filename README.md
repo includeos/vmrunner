@@ -7,7 +7,7 @@ Utilities for booting [IncludeOS](https://github.com/includeos/includeos) binari
 
 
 ## Installing
-Install python3 venv, `sudo apt install python3.12-venv` on ubuntu 24.24. Then create a venv:
+Install python3 venv, `sudo apt install python3.12-venv` on Ubuntu 24.04. Then create a venv:
 ```
 $ python3 -m venv venv
 $ source venv/bin/activate
