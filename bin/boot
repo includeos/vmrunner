@@ -5,9 +5,15 @@ import os
 import sys
 import argparse
 import subprocess
-import re
+import shutil
 
 from vmrunner.prettify import color
+
+# Get the path to INCLUDEOS_VMRUNNER from the environment variable
+includeos_vmrunner = os.environ.get('INCLUDEOS_VMRUNNER')
+if not includeos_vmrunner:
+    print("Error: INCLUDEOS_VMRUNNER environment variable is not set.")
+    sys.exit(1)
 
 # Argparse
 parser = argparse.ArgumentParser(
@@ -46,7 +52,7 @@ args = parser.parse_args()
 
 
 # Pretty printing from this command
-nametag = "<boot>"
+nametag = "<boot>    "
 INFO = color.INFO(nametag)
 
 # Override VM output prepension
@@ -61,7 +67,6 @@ if (args.verbose):
 # Avoid the verbose var to hang around next run
 elif "VERBOSE" in os.environ:
     del os.environ["VERBOSE"]
-
 
 # Note: importing vmrunner will make it start looking for VM's
 # vmrunner also relies on the verbose env var to be set on initialization
@@ -123,6 +128,9 @@ vm.on_panic(lambda x: None, do_exit = False)
 
 file_extension = os.path.splitext(args.vm_location)[1]
 
+def is_executable(file_path):
+    return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
+
 if (args.debug):
     print(INFO, "Booting in debug mode")
 
@@ -131,14 +139,14 @@ if args.bridge:
     subprocess.call("create_bridge.sh", shell=True)
 
 elif file_extension in image_extensions:
-    if VERB: print(INFO, "File extension recognized as bootable image")
+    if VERB: print(INFO, f"File extension '{file_extension}' recognized as bootable image")
     has_bootloader = True
 
 elif not file_extension:
     if VERB: print(INFO, "No file extension. Trying to boot as kernel")
 
 else:
-    if VERB: print(INFO, "Unrecognized file extension. Trying to boot as kernel")
+    if VERB: print(INFO, f"Unrecognized file extension '{file_extension}'. Trying to boot as kernel")
 
 if (args.grub or args.grub_reuse):
     print(INFO, "Creating GRUB image from ", args.vm_location)
@@ -147,8 +155,24 @@ if (args.grub or args.grub_reuse):
     if args.grub_reuse:
         opts += "-u "
 
-    subprocess.call("grubify.sh " + opts + image_name, shell=True)
-    image_name = image_name + ".grub.img"
+    grubify_script = shutil.which("grubify.sh")
+    if not grubify_script:
+        print(f"Error: {grubify_script} not found or not executable.")
+        sys.exit(1)
+
+    if not os.access('.', os.W_OK):
+        print("Error: Cannot write to the current directory.")
+        sys.exit(1)
+
+    subprocess.call(grubify_script + " " + opts + image_name, shell=True)
+
+    base_image_name = os.path.basename(image_name)
+    image_name = os.path.join(os.getcwd(), base_image_name + ".grub.img")
+
+    if not os.path.exists(image_name):
+        print(f"Error: {image_name} does not exist.")
+        sys.exit(1)
+
     has_bootloader = True
 
 if (not has_bootloader):

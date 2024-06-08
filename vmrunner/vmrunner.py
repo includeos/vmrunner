@@ -35,13 +35,23 @@ default_config = INCLUDEOS_VMRUNNER  + "/vmrunner/vm.vanilla.json"
 
 default_json = "./vm.json"
 #TODO check and verify only when needed
-chainloader = os.environ['INCLUDEOS_CHAINLOADER'] + "/chainloader"
+chainloader = os.environ.get('INCLUDEOS_CHAINLOADER')
+
+if chainloader:
+    chainloader = chainloader + "/chainloader"
+else:
+    chainloader = None
 
 # Provide a list of VM's with validated specs
 # (One default vm added at the end)
 vms = []
 
 panic_signature = "\\x15\\x07\\t\*\*\*\* PANIC \*\*\*\*"
+
+# TODO: Consider adding hidden control characters here
+#       to make it even less likely that this will appear in the wild
+includeos_signature = "#include<os> // Literally"
+
 nametag = "<VMRunner>"
 INFO = color.INFO(nametag)
 VERB = bool(os.environ["VERBOSE"]) if "VERBOSE" in os.environ else False
@@ -353,6 +363,7 @@ class solo5_spt(solo5):
         solo5_bin = "solo5-spt"
         super(solo5_spt, self).boot(solo5_bin, multiboot, debug, kernel_args, image_name)
 
+
 # Qemu Hypervisor interface
 class qemu(hypervisor):
 
@@ -363,6 +374,11 @@ class qemu(hypervisor):
         self._sudo = False
         self._image_name = self._config if "image" in self._config else self.name() + " vm"
         self.m_drive_no = 0
+
+        # TODO: Consider regex expecting a version number here
+        self._bios_signature = "SeaBIOS (version"
+        self._past_bios = False
+        self._reboots = 0;
 
         # Pretty printing
         self.info = Logger(color.INFO("<" + type(self).__name__ + ">"))
@@ -497,6 +513,10 @@ class qemu(hypervisor):
             if is_Elf64(image_name):
                 info ("Found 64-bit ELF, need chainloader" )
                 print("Looking for chainloader: ")
+                if chainloader == None or not os.path.isfile(chainloader):
+                    print(f"Error: couldn't find chainloader. Try -g for grub, or create an .img with vmbuild.")
+                    sys.exit(1)
+
                 print("Found", chainloader, "Type: ",  file_type(chainloader))
                 if not is_Elf32(chainloader):
                     print(color.WARNING("Chainloader doesn't seem to be a 32-bit ELF executable"))
@@ -670,10 +690,85 @@ class qemu(hypervisor):
         return chars
 
 
-    def readline(self):
+
+    def readline(self, filter_all_control_chars = False):
         if self._proc.poll():
             raise Exception("Process completed")
-        return self._proc.stdout.readline().decode("utf-8", errors="replace")
+
+        # SeaBIOS emits a lot of control characters, which looses important information,
+        # like the number of reboots and the earliest output from IncludeOS. It also ruins your
+        # terminal, by disabling line wrapping, clearing screen, moving cursor etc.
+        #
+        # At the time of writing, exactly what it emits is this:
+        # \x1bc\x1b[?7l\x1b[2J\x1b[0mSeaBIOS (version 1.16.3-debian-1.16.3-2)\r\nBooting from Hard Disk...\r\n\x1b[H\x1b[J\x1b[1;1H
+        #
+        # If they ever change this, we might want to use thhe more comprehensive approach for
+        # cleaning control chars using regexes below, but for now the cheapest seems to be
+        # plain string matching.
+        #
+        if (not filter_all_control_chars):
+            line = self._proc.stdout.readline().decode("utf-8", errors="replace")
+
+            # Known control sequences to be trimmed
+            SeaBIOS_start = "\x1bc\x1b[?7l\x1b[2J\x1b[0m"
+            SeaBIOS_end = "\x1b[H\x1b[J\x1b[1;1H"
+
+            # Trim the start sequence if present
+            if SeaBIOS_start + "SeaBIOS" in line:
+                line = line.split(SeaBIOS_start, 1)[-1]
+                if self._reboots > 0:
+                    print(color.WARNING(f"Reboot detected, #{self._reboots}"))
+                self._reboots += 1
+
+            # Trim the end sequence (it's on its own line, so remove the whole thing)
+            if SeaBIOS_end in line:
+                line = ""
+
+            return line
+
+        # Alternative path in case we want to filter all control chars from other sources as well.
+        control_sequence_pattern = re.compile(r'\x1b.*?[a-zA-Z]')
+
+        # We need to process each character as a raw byte to preserve unicode
+        clean_buffer = bytearray()
+        control_buffer = bytearray()
+        inside_control_sequence = False
+        while True:
+
+            # TODO: find out how slow this is.
+            # if it's not reading from an in-process buffer we should buffer here.
+            char = self._proc.stdout.read(1)
+
+            if not char:
+                break
+
+            if char == b'\n':
+                clean_buffer.append(char[0])
+                break
+
+            if char == b'\x1B':
+                inside_control_sequence = True
+                control_buffer.append(char[0])
+
+            elif inside_control_sequence:
+                control_buffer.append(char[0])
+                if control_sequence_pattern.match(control_buffer.decode("utf-8", errors="replace")):
+                    # Complete control sequence found, discard buffer
+                    inside_control_sequence = False
+                    control_buffer = bytearray()
+
+            else:
+                clean_buffer.append(char[0])
+
+        string = clean_buffer.decode("utf-8", errors="replace")
+
+        if includeos_signature in string:
+            self._past_bios = True
+
+        if self._past_bios and self._bios_signature in string:
+            print(color.WARNING("Reboot detected"))
+
+        return string
 
 
     def writeline(self, line):
@@ -689,6 +784,7 @@ class vm(object):
 
     def __init__(self, config = None, hyper_name = "qemu"):
 
+        self._stopping = False
         self._exit_status = None
         self._exit_msg = ""
         self._exit_complete = False
@@ -718,7 +814,7 @@ class vm(object):
         self._root = os.getcwd()
         self._kvm_present = False
 
-    def stop(self):
+    def stop(self, signal = None):
         self.flush()
         self._hyper.stop().wait()
         if self._timer:
@@ -726,12 +822,19 @@ class vm(object):
         return self
 
     def flush(self):
+        if self._hyper._proc == None:
+            return
+        
         while self._exit_status == None and self.poll() == None:
 
                 try:
                     line = self._hyper.readline()
                 except Exception as e:
-                    print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
+                    # We might be blocked on self._hyper.readline() when a signal handler tells us to stop
+                    # because it stops us by sending sigterm to the parent process and all children.
+                    # In that case an exception is expected, but not otherwise.
+                    if signal == None:
+                        print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
                     break
 
                 if line and self.find_exit_status(line) == None:
@@ -917,8 +1020,8 @@ class vm(object):
                 break
 
             if line and self.find_exit_status(line) == None:
-                    print(color.VM(line.rstrip()))
-                    self.trigger_event(line)
+                print(color.VM(line.rstrip()))
+                self.trigger_event(line)
 
             # Empty line - should only happen if process exited
             else: pass
@@ -1041,7 +1144,7 @@ def program_exit(status, msg):
     info("Stopping all vms")
 
     for vm in vms:
-        vm.stop().wait()
+        vm.stop(status).wait()
 
     # Print status message and exit with appropriate code
     if (status):
