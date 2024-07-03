@@ -31,7 +31,7 @@ package_path = os.path.dirname(os.path.realpath(__file__))
 #TODO CHECK AND VERIFY
 INCLUDEOS_VMRUNNER = os.environ['INCLUDEOS_VMRUNNER']
 
-default_config = INCLUDEOS_VMRUNNER  + "/vmrunner/vm.vanilla.json"
+default_config = INCLUDEOS_VMRUNNER  + "/vmrunner/vm.userspace.json"
 
 default_json = "./vm.json"
 #TODO check and verify only when needed
@@ -163,9 +163,11 @@ class hypervisor(object):
 
     def __init__(self, config):
         self._config = config;
+        self._allow_sudo = False # must be explicitly turned on at boot.
+        self._enable_kvm = False # must be explicitly turned on at boot.
 
     # Boot a VM, returning a hypervisor handle for reuse
-    def boot(self):
+    def boot(self, allow_sudo = False, enable_kvm = False):
         abstract()
 
     # Stop the VM booted by boot
@@ -198,6 +200,10 @@ class hypervisor(object):
     def start_process(self, cmdlist):
 
         if cmdlist[0] == "sudo": # and have_sudo():
+
+            if not self._allow_sudo:
+                raise Exception("Hypervisor started with sudo, but sudo is not enabled");
+
             print(color.WARNING("Running with sudo"))
             self._sudo = True
 
@@ -244,8 +250,14 @@ class solo5(hypervisor):
     def get_final_output(self):
         return self._proc.communicate()
 
-    def boot(self, solo5_bin, multiboot, debug, kernel_args, image_name):
+    def boot(self, solo5_bin, multiboot, debug, kernel_args, image_name, allow_sudo = False, enable_kvm = False):
+
+        self._allow_sudo = allow_sudo
+        self._enable_kvm = enable_kvm
         self._stopped = False
+
+        if not self._allow_sudo or not self.enable_kvm:
+            raise Exception("Solo5 requires sudo and kvm enabled")
 
         # Use provided image name if set, otherwise raise an execption
         if not image_name:
@@ -348,7 +360,9 @@ class solo5_hvt(solo5):
     def name(self):
         return "Solo5-hvt"
 
-    def boot(self, multiboot, debug=False, kernel_args = "", image_name = None):
+    def boot(self, multiboot, debug=False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
+        self._allow_sudo = allow_sudo
+        self._enable_kvm = enable_kvm
         solo5_bin = "solo5-hvt"
         super(solo5_hvt, self).boot(solo5_bin, multiboot, debug, kernel_args, image_name)
 
@@ -359,7 +373,9 @@ class solo5_spt(solo5):
     def name(self):
         return "Solo5-spt"
 
-    def boot(self, multiboot, debug=False, kernel_args = "", image_name = None):
+    def boot(self, multiboot, debug=False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
+        self._allow_sudo = allow_sudo
+        self._enable_kvm = enable_kvm
         solo5_bin = "solo5-spt"
         super(solo5_spt, self).boot(solo5_bin, multiboot, debug, kernel_args, image_name)
 
@@ -420,6 +436,7 @@ class qemu(hypervisor):
         return ["-initrd", mods_list]
 
     def net_arg(self, backend, device, if_name = "net0", mac = None, bridge = None, scripts = None):
+
         if scripts:
             qemu_ifup = scripts + "qemu-ifup"
             qemu_ifdown = scripts + "qemu-ifdown"
@@ -437,6 +454,9 @@ class qemu(hypervisor):
         netdev = backend + ",id=" + if_name
 
         if backend == "tap":
+            if not self._allow_sudo:
+                raise Exception("Configuring a tap device requires --sudo, which is not enabled")
+
             if self._kvm_present:
                 netdev += ",vhost=on"
             netdev += ",script=" + qemu_ifup + ",downscript=" + qemu_ifdown
@@ -455,6 +475,13 @@ class qemu(hypervisor):
                 "-netdev", netdev]
 
     def kvm_present(self):
+        if (not self._enable_kvm):
+            self.info("KVM OFF")
+            return False
+
+        if (not self._allow_sudo):
+            raise Exception("KVM is enabled, which requires sudo, but sudo is not enabled")
+
         command = "egrep -m 1 '^flags.*(vmx|svm)' /proc/cpuinfo"
         try:
             subprocess.check_output(command, shell = True)
@@ -477,10 +504,13 @@ class qemu(hypervisor):
     def get_final_output(self):
         return self._proc.communicate()
 
-    def boot(self, multiboot, debug = False, kernel_args = "", image_name = None):
+    def boot(self, multiboot, debug = False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
+        self._allow_sudo = allow_sudo
+        self._enable_kvm = enable_kvm
         self._stopped = False
 
-        info ("Booting with multiboot:", multiboot, "kernel_args: ", kernel_args, "image_name:", image_name)
+        info ("Booting with multiboot:", multiboot, "kernel_args: ", kernel_args, "image_name:", image_name,
+              "allow_sudo:", allow_sudo)
 
         # Resolve if kvm is present
         self._kvm_present = self.kvm_present()
@@ -601,9 +631,14 @@ class qemu(hypervisor):
         if "qemu" in self._config:
             qemu_binary = self._config["qemu"]
 
-        # TODO: sudo is only required for tap networking and kvm. Check for those.
-        command = ["sudo", qemu_binary]
-        if self._kvm_present:
+
+        command = []
+        if self._allow_sudo:
+            command.append("sudo")
+
+        command.append(qemu_binary)
+
+        if self._kvm_present and self._enable_kvm:
             command.extend(["--enable-kvm"])
 
         # If hvf is present, use it and enable cpu features (needed for rdrand/rdseed)
@@ -617,10 +652,6 @@ class qemu(hypervisor):
             if self.hvf_present():
                 command.extend(["-cpu","host"])
 
-        # Warn if no hardware acceleration
-        if not (self.hvf_present() or self._kvm_present):
-            print(color.WARNING("Hardware acceleration not detected. Will attempt to boot anyway.") )
-            time.sleep(1)
 
         command += kernel_args
         command += disk_args + debug_args + net_args + mem_arg + mod_args
@@ -636,7 +667,7 @@ class qemu(hypervisor):
             self.start_process(command)
             self.info("Started process PID ",self._proc.pid)
         except Exception as e:
-            print(self.INFO,"Starting subprocess threw exception:", e)
+            print(self.info,"Starting subprocess threw exception:", e)
             raise e
 
     def stop(self):
@@ -791,7 +822,7 @@ class vm(object):
 
         self._config = load_with_default_config(True, config)
         self._on_success = lambda line : self.exit(exit_codes["SUCCESS"], nametag + " All tests passed")
-        self._on_unsafe = lambda line : self.exit(exit_codes["UNSAFE"], nametag + " Not fit for production")
+        self._on_unsafe = lambda line : self.exit(exit_codes["UNSAFE"], nametag + " Tests passed with warnings")
         self._on_panic =  self.panic
         self._on_timeout = self.timeout
         self._on_output = {
@@ -824,7 +855,7 @@ class vm(object):
     def flush(self):
         if self._hyper._proc == None:
             return
-        
+
         while self._exit_status == None and self.poll() == None:
 
                 try:
@@ -988,8 +1019,14 @@ class vm(object):
 
 
     # Boot the VM and start reading output. This is the main event loop.
-    def boot(self, timeout = 60, multiboot = True, debug = False, kernel_args = "booted with vmrunner", image_name = None):
-        info ("VM boot, timeout: ", timeout, "multiboot: ", multiboot, "Kernel_args: ", kernel_args, "image_name: ", image_name)
+    def boot(self, timeout = 60, multiboot = True, debug = False, kernel_args = "booted with vmrunner",
+             image_name = None, allow_sudo = False, enable_kvm = False):
+        info ("VM boot, timeout: ", timeout, "multiboot: ", multiboot, "Kernel_args: ", kernel_args,
+              "image_name: ", image_name, allow_sudo, "allow_sudo")
+
+        self._allow_sudo = allow_sudo
+        self._enable_kvm = enable_kvm
+
         # This might be a reboot
         self._exit_status = None
         self._exit_complete = False
@@ -1003,7 +1040,7 @@ class vm(object):
 
         # Boot via hypervisor
         try:
-            self._hyper.boot(multiboot, debug, kernel_args, image_name)
+            self._hyper.boot(multiboot, debug, kernel_args, image_name, allow_sudo, enable_kvm)
         except Exception as err:
             print(color.WARNING("Exception raised while booting: "))
             print_exception()
@@ -1147,7 +1184,10 @@ def program_exit(status, msg):
         vm.stop(status).wait()
 
     # Print status message and exit with appropriate code
-    if (status):
+    if (get_exit_code_name(status) == "UNSAFE"):
+        print(color.WARNING("Do not rely on this image for secure applications."))
+        status = 0
+    if (status != 0):
         print(color.EXIT_ERROR(get_exit_code_name(status), msg))
     else:
         print(color.SUCCESS(msg))

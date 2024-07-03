@@ -22,14 +22,20 @@ parser = argparse.ArgumentParser(
 parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", default=False,
                     help="Verbose output")
 
+parser.add_argument("--sudo", dest="sudo", action="store_true", default=False,
+                    help="Allow sudo. Required for creating bridges and using kvm")
+
+parser.add_argument("--kvm", dest="kvm", action="store_true", default=False,
+                    help="Enables kvm if present. Requires --sudo. The default is to emulate without kvm.")
+
 parser.add_argument("--create-bridge", dest="bridge", action="store_true",
-                    help="Create bridge43, used in local testing when TAP devices are supported")
+                    help="Create bridge43, used in local testing when TAP devices are supported. Requires --sudo.")
 
 parser.add_argument("-g", "--grub", dest="grub", action="store_true",
-                    help="Create image with GRUB bootloader that will boot provided binary")
+                    help="Create image with GRUB bootloader that will boot provided binary. Requires --sudo.")
 
 parser.add_argument("--grub-reuse", dest="grub_reuse", action="store_true",
-                    help="Reuse existing GRUB image if exists. Avoids reinstalling GRUB.")
+                    help="Reuse existing GRUB image if exists. Avoids reinstalling GRUB. Requires --sudo.")
 
 parser.add_argument("-j", "--config", dest="config", type = str, metavar = "PATH",
                     help="Location of VM config file - JSON validated against a schema")
@@ -41,10 +47,10 @@ parser.add_argument("-d", "--debug", dest="debug", action="store_true",
                     help="Start hypervisor in debug mode if available")
 
 parser.add_argument("--with-solo5-hvt", dest="solo5_hvt", action="store_true",
-                    help="Run includeOS on solo5 kernel with hvt tender as monitor")
+                    help="Run includeOS on solo5 kernel with hvt tender as monitor. Requires --sudo and --kvm.")
 
 parser.add_argument("--with-solo5-spt", dest="solo5_spt", action="store_true",
-                    help="Run includeOS on solo5 kernel with spt tender as monitor")
+                    help="Run includeOS on solo5 kernel with spt tender as monitor. Requires --sudo and --kvm.")
 
 parser.add_argument('vmargs', nargs='*', help="Arguments to pass on to the VM start / main")
 
@@ -109,6 +115,10 @@ if args.solo5_hvt:
     os.environ['PLATFORM'] = "x86_solo5"
     solo5_hvt = "solo5-hvt"
 
+    if not args.sudo:
+        print(f"Error: bringing up the solo5 interface requires suddo. Allow by passing --sudo")
+        sys.exit(1)
+
     subprocess.call(['chmod', '+x', solo5_hvt])
     subprocess.call(['sudo', "solo5-ifup.sh" ])
 
@@ -116,6 +126,10 @@ elif args.solo5_spt:
     hyper_name = "solo5-spt"
     os.environ['PLATFORM'] = "x86_solo5"
     solo5_spt = "solo5-spt"
+
+    if not args.sudo:
+        print(f"Error: bringing up the solo5 interface requires suddo. Allow by passing --sudo")
+        sys.exit(1)
 
     subprocess.call(['chmod', '+x', solo5_spt])
     subprocess.call(['sudo', "solo5-ifup.sh" ])
@@ -160,6 +174,11 @@ if (args.grub or args.grub_reuse):
         print(f"Error: {grubify_script} not found or not executable.")
         sys.exit(1)
 
+    if not args.sudo:
+        print(f"Error: creating grub images require sudo. Allow with --sudo.")
+        sys.exit(1)
+
+
     if not os.access('.', os.W_OK):
         print("Error: Cannot write to the current directory.")
         sys.exit(1)
@@ -176,8 +195,10 @@ if (args.grub or args.grub_reuse):
     has_bootloader = True
 
 if (not has_bootloader):
-    vm.boot(timeout = None, multiboot = True, debug = args.debug, kernel_args = " ".join(args.vmargs), image_name = image_name)
+    vm.boot(timeout = None, multiboot = True, debug = args.debug, kernel_args = " ".join(args.vmargs),
+            image_name = image_name, allow_sudo = args.sudo, enable_kvm = args.kvm)
 else:
-    vm.boot(timeout = None, multiboot = False, debug = args.debug, kernel_args = None, image_name = image_name)
+    vm.boot(timeout = None, multiboot = False, debug = args.debug, kernel_args = None, image_name = image_name,
+            allow_sudo = args.sudo, enable_kvm = args.kvm)
 
 exit(0);
