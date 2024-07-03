@@ -9,11 +9,11 @@ let
 in
   pkgs.mkShell {
     INCLUDEOS_VMRUNNER=builtins.toString ./.;
-    PYTHONPATH=builtins.toString ./vmrunner;
+    PYTHONPATH=builtins.toString ./.;
 
     buildInputs = [
-        pkgs.qemu
-      ];
+      pkgs.qemu
+    ];
 
     packages = [
       pythonEnv
