@@ -73,7 +73,7 @@
         "properties" : {
           "device" : { "type" : "string" },
           "name" : { "type" : "string" },
-          "backend" : { "enum" : ["tap", "user"], "default" : "tap" }
+          "backend" : { "enum" : ["tap", "user", "bridge"], "default" : "bridge" }
         },
 
         "required" : ["device"]
