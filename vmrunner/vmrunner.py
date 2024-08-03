@@ -459,10 +459,15 @@ class qemu(hypervisor):
 
             if self._kvm_present:
                 netdev += ",vhost=on"
+
             netdev += ",script=" + qemu_ifup + ",downscript=" + qemu_ifdown
+
+        if backend == "bridge" and bridge == None:
+            bridge = "bridge43"
 
         if bridge:
             netdev = "bridge,id=" + if_name + ",br=" + bridge
+
 
         # Device - e.g. guest side of nic
         device += ",netdev=" + if_name
