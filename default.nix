@@ -17,6 +17,12 @@ pkgs.python3.pkgs.buildPythonPackage rec {
     psutil
   ];
 
+  create_bridge = ./vmrunner/bin/create_bridge.sh;
+
+  passthru = {
+    inherit create_bridge;
+  };
+
   meta = {
     description = "A convenience wrapper around qemu for IncludeOS integration tests";
     license = pkgs.lib.licenses.asl20;
