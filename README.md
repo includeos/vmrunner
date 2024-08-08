@@ -59,11 +59,12 @@ Installing and running with pipx should work as recommended here: https://packag
 
 ```
 pipx install .
-``
+```
 
 Will by default install boot locally to your `$HOME/.local/bin`. It can also be run directly from `pipx` without installation.
 
 **Example:**
+
 ```
 $ cd ~/IncludeOS
 $ export INCLUDEOS_CHAINLOADER=$(nix-build chainloader.nix)/bin
@@ -87,12 +88,3 @@ Booting from ROM..* Multiboot begin: 0x9500
      [ x86_64 ] Initializing paging
 ...
 ```
-
-
-
-## Setting up a network bridge
-
-
-
-## Note: conan / jenkins deprecated.
-The Conanfile / Jenkinsfile is no longer maintained and will probably be removed
