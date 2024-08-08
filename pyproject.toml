@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+# This will make git the source of truth for which files to package.
+
+[project]
+name = "vmrunner"
+version = "0.16.0"
+description = "A qemu convenience wrapper for writing integration tests"
+dependencies = [
+    "future",
+    "jsonschema",
+    "psutil",
+]
+
+[project.scripts]
+boot = "vmrunner.boot:main"
