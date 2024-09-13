@@ -6,6 +6,8 @@
 # Mac still only supports ifconfig, not iproute2
 if uname -s | grep Darwin > /dev/null 2>&1; then
   on_mac=true
+else
+  on_mac=false
 fi
 
 # The name of the bridge VMs are added to
@@ -16,16 +18,16 @@ BRIDGE=${INCLUDEOS_BRIDGE:-"bridge43"}
 # ==============================================================================
 
 if [ -n "$1" ];then
-  if [ $on_mac ]; then
-    ifconfig $1 down
+  if $on_mac; then
+    ifconfig "$1" down
   else
-    ip link set $1 down
+    ip link set "$1" down
   fi
 
-  if [ $on_mac ]; then
-    ifconfig $BRIDGE deletem $1
+  if $on_mac; then
+    ifconfig "$BRIDGE" deletem "$1"
   else
-    ip link delete dev $1
+    ip link delete dev "$1"
   fi
 else
   echo "Error: no interface specified" >&2
