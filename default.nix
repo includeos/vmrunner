@@ -5,6 +5,7 @@ pkgs.python3.pkgs.buildPythonPackage rec {
   src = ./.;  # Use the current directory as the source
   pyproject = true;
   dontUseSetuptoolsCheck = true;
+  doCheck = true;
 
   build-system = with pkgs.python3.pkgs; [
     setuptools
@@ -27,4 +28,16 @@ pkgs.python3.pkgs.buildPythonPackage rec {
     description = "A convenience wrapper around qemu for IncludeOS integration tests";
     license = pkgs.lib.licenses.asl20;
   };
+
+  nativeCheckInputs = [
+    pkgs.shellcheck
+  ];
+
+  checkPhase = ''
+    for f in vmrunner/bin/{*.sh,qemu-ifup,qemu-ifdown}; do
+      echo Checking "$f" with shellcheck
+      shellcheck "$f"
+    done
+  '';
+
 }
