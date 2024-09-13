@@ -31,12 +31,18 @@ pkgs.python3.pkgs.buildPythonPackage rec {
 
   nativeCheckInputs = [
     pkgs.shellcheck
+    pkgs.pylint
   ];
 
   checkPhase = ''
     for f in vmrunner/bin/{*.sh,qemu-ifup,qemu-ifdown}; do
       echo Checking "$f" with shellcheck
       shellcheck "$f"
+    done
+
+    for f in vmrunner/*.py; do
+      echo Checking $f with pylint
+      pylint --persistent no "$f"
     done
   '';
 
