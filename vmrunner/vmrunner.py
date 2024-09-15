@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 
+""" vmrunner is hypervisor-agnostic tool and library for running
+    and testing IncludeOS unikernels """
+
+# pylint: disable=line-too-long, too-many-lines, invalid-name, fixme, broad-exception-raised, broad-exception-caught, too-many-arguments, too-many-branches, too-many-statements, too-many-instance-attributes, too-many-locals
+
 from __future__ import print_function
 from __future__ import absolute_import
-from future import standard_library
-standard_library.install_aliases()
+
+
 from builtins import hex
 from builtins import chr
 from builtins import str
-from builtins import object
+
 import os
 import sys
 import subprocess
-import _thread
 import threading
-import time
 import re
-import linecache
 import traceback
 import signal
-import psutil
+from enum import Enum
 import platform
+import psutil
 
-from shutil import copyfile
-
-import vmrunner.validate_vm as validate_vm
+from vmrunner import validate_vm
 from .prettify import color
 
 package_path = os.path.dirname(os.path.realpath(__file__))
@@ -46,7 +47,7 @@ else:
 # (One default vm added at the end)
 vms = []
 
-panic_signature = "\\x15\\x07\\t\*\*\*\* PANIC \*\*\*\*"
+panic_signature = re.escape(r"\x15\x07\t**** PANIC ****")
 
 # TODO: Consider adding hidden control characters here
 #       to make it even less likely that this will appear in the wild
@@ -56,10 +57,11 @@ nametag = "<VMRunner>"
 INFO = color.INFO(nametag)
 VERB = bool(os.environ["VERBOSE"]) if "VERBOSE" in os.environ else False
 
-class Logger(object):
+class Logger:
+    """ Logger class """
     def __init__(self, tag):
         self.tag = tag
-        if (VERB):
+        if VERB:
             self.info = self.info_verb
         else:
             self.info = self.info_silent
@@ -68,20 +70,20 @@ class Logger(object):
         self.info(args)
 
     def info_verb(self, args):
+        """ verbose mode version of info """
         print(self.tag, end=' ')
         for arg in args:
             print(arg, end=' ')
         print()
 
     def info_silent(self, args):
-        pass
+        """ silenced mode version of info """
 
 # Define verbose printing function "info", with multiple args
 default_logger = Logger(INFO)
 def info(*args):
+    """ verbose printing function with multiple args """
     default_logger.info(args)
-
-
 
 # Example on Ubuntu:
 # ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, not stripped
@@ -94,18 +96,19 @@ def info(*args):
 # Mac native:
 # Mach-O 64-bit x86_64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|WEAK_DEFINES|BINDS_TO_WEAK|PIE>
 
-
-
 def file_type(filename):
-    p = subprocess.Popen(['file',filename],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-    output, errors = p.communicate()
-    return output.decode("utf-8")
+    """ calls the 'file' tool to determine file type """
+    with subprocess.Popen(['file',filename],stdout=subprocess.PIPE,stderr=subprocess.STDOUT) as p:
+        output, _ = p.communicate()
+        return output.decode("utf-8")
 
 def is_Elf64(filename):
+    """ returns true if the file is an elf64 executable """
     magic = file_type(filename)
     return "ELF" in magic and "executable" in magic and "64-bit" in magic
 
 def is_Elf32(filename):
+    """ returns true if the file is an elf32 executable """
     magic = file_type(filename)
     return "ELF" in magic and "executable" in magic and "32-bit" in magic
 
@@ -127,87 +130,97 @@ exit_codes = {"SUCCESS" : 0,
 }
 
 def get_exit_code_name (exit_code):
+    """ convert exit code to string """
     for name, code in exit_codes.items():
-        if code == exit_code: return name
+        if code == exit_code:
+            return name
     return "UNKNOWN ERROR"
 
-# We want to catch the exceptions from callbacks, but still tell the test writer what went wrong
 def print_exception():
+    """ We want to catch the exceptions from callbacks, but still tell the test writer what went wrong """
     exc_type, exc_value, exc_traceback = sys.exc_info()
     traceback.print_exception(exc_type, exc_value, exc_traceback,
                               limit=10, file=sys.stdout)
 
 
-devnull = open(os.devnull, 'w')
-
-# Check for prompt-free sudo access
 def have_sudo():
+    """ Check for prompt-free sudo access """
     try:
-        subprocess.check_output(["sudo", "-n", "whoami"], stderr = devnull) == 0
+        with open(os.devnull, 'w', encoding="utf-8") as devnull:
+            subprocess.check_output(["sudo", "-n", "whoami"], stderr = devnull)
     except Exception as e:
-        raise Exception("Sudo access required")
+        raise Exception("Sudo access required") from e
 
     return True
 
-# Run a command, pretty print output, throw on error
 def cmd(cmdlist):
+    """ Run a command, pretty print output, throw on error """
     res = subprocess.check_output(cmdlist)
     for line in res.rstrip().split("\n"):
         print(color.SUBPROC(line))
 
 def abstract():
+    """ internal method for abstract calls - only raises an exception """
     raise Exception("Abstract class method called. Use a subclass")
-# Hypervisor base / super class
-# (It seems to be recommended for "new style classes" to inherit object)
-class hypervisor(object):
+
+class hypervisor:
+    """ Hypervisor base / super class """
 
     def __init__(self, config):
-        self._config = config;
+        self._config = config
         self._allow_sudo = False # must be explicitly turned on at boot.
         self._enable_kvm = False # must be explicitly turned on at boot.
+        self._sudo = False # Set to true if sudo is available
+        self._proc = None # A running subprocess
 
-    # Boot a VM, returning a hypervisor handle for reuse
-    def boot(self, allow_sudo = False, enable_kvm = False):
+    # pylint: disable-next=unused-argument
+    def boot_in_hypervisor(self, multiboot=False, debug=False, kernel_args="", image_name="", allow_sudo = False, enable_kvm = False):
+        """ Boot a VM, returning a hypervisor handle for reuse """
         abstract()
 
-    # Stop the VM booted by boot
     def stop(self):
+        """ Stop the VM booted by boot """
         abstract()
 
-    # Read a line of output from vm
     def readline(self):
+        """ Read a line of output from vm """
         abstract()
 
-    # Verify that the hypervisor is available
+    # pylint: disable-next=unused-argument
     def available(self, config_data = None):
+        """ Verify that the hypervisor is available """
         abstract()
 
-    # Wait for this VM to exit
     def wait(self):
+        """ Wait for this VM to exit """
         abstract()
 
-    # Wait for this VM to exit
     def poll(self):
+        """ Wait for this VM to exit """
         abstract()
 
-    # A descriptive name
     def name(self):
+        """ A descriptive name """
         abstract()
 
     def image_name(self):
+        """ Name of image """
         abstract()
 
     def start_process(self, cmdlist):
+        """ Start hypervisor process """
 
         if cmdlist[0] == "sudo": # and have_sudo():
 
             if not self._allow_sudo:
-                raise Exception("Hypervisor started with sudo, but sudo is not enabled");
+                raise Exception("Hypervisor started with sudo, but sudo is not enabled")
 
             print(color.WARNING("Running with sudo"))
             self._sudo = True
 
+
         # Start a subprocess
+        # pylint: disable-next=consider-using-with
         self._proc = subprocess.Popen(cmdlist,
                                       stdout = subprocess.PIPE,
                                       stderr = subprocess.STDOUT,
@@ -215,29 +228,42 @@ class hypervisor(object):
 
         return self._proc
 
+    def has_process(self):
+        """ Returns true if a hypervisor process has been started (but it may have crashed/exited) """
+        return self._proc is not None
 
-# Solo5 Hypervisor interface
+Solo5Tender = Enum('Solo5Type', ['hvt', 'spt'])
+
 class solo5(hypervisor):
+    """ Solo5 Hypervisor interface """
 
-    def __init__(self, config):
+    def __init__(self, tender, config):
         # config is not yet used for solo5
-        super(solo5, self).__init__(config)
+        super().__init__(config)
         self._proc = None
         self._stopped = False
         self._sudo = False
         self._image_name = self._config if "image" in self._config else self.name() + " vm"
+        self._tender = tender
+
+        if tender == Solo5Tender.spt:
+            self._solo5_bin = "solo5-spt"
+        elif tender == Solo5Tender.hvt:
+            self._solo5_bin = "solo5-hvt"
+        else:
+            raise NotImplementedError()
 
         # Pretty printing
         self.info = Logger(color.INFO("<" + type(self).__name__ + ">"))
 
     def name(self):
-        raise NotImplementedError()
+        return self._solo5_bin.title()
 
     def image_name(self):
         return self._image_name
 
-    def drive_arg(self, filename,
-                  device_format="raw", media_type="disk"):
+    def drive_arg(self, filename, device_format="raw", media_type="disk"):
+        """ returns disk argument for solo5 """
         if device_format != "raw":
             raise Exception("solo5 can only handle drives in raw format.")
         if media_type != "disk":
@@ -245,18 +271,21 @@ class solo5(hypervisor):
         return ["--disk=" + filename]
 
     def net_arg(self):
+        """ returns net argument for solo5 """
         return ["--net=tap100"]
 
     def get_final_output(self):
+        """ gets final output from hypervisor process """
         return self._proc.communicate()
 
-    def boot(self, solo5_bin, multiboot, debug, kernel_args, image_name, allow_sudo = False, enable_kvm = False):
+    def boot_in_hypervisor(self, multiboot = False, debug = False, kernel_args = "", image_name = "", allow_sudo = False, enable_kvm = False):
+        """ start hypervisor with the selected configuration (boot the VM) """
 
         self._allow_sudo = allow_sudo
         self._enable_kvm = enable_kvm
         self._stopped = False
 
-        if not self._allow_sudo or not self.enable_kvm:
+        if not self._allow_sudo or not self._enable_kvm:
             raise Exception("Solo5 requires sudo and kvm enabled")
 
         # Use provided image name if set, otherwise raise an execption
@@ -265,7 +294,7 @@ class solo5(hypervisor):
 
         self._image_name = image_name
 
-        command = ["sudo", solo5_bin]
+        command = ["sudo", self._solo5_bin]
 
         if not "drives" in self._config:
             command += self.drive_arg(self._image_name)
@@ -290,16 +319,16 @@ class solo5(hypervisor):
 
     def stop(self):
 
-        signal = "-SIGTERM"
+        signal_ = "-SIGTERM"
 
         # Don't try to kill twice
         if self._stopped:
             self.wait()
             return self
-        else:
-            self._stopped = True
 
-        if self._proc and self._proc.poll() == None :
+        self._stopped = True
+
+        if self._proc and self._proc.poll() is None :
 
             if not self._sudo:
                 info ("Stopping child process (no sudo required)")
@@ -309,14 +338,14 @@ class solo5(hypervisor):
                 parent = psutil.Process(self._proc.pid)
                 children = parent.children()
 
-                info ("Stopping", self._image_name, "PID",self._proc.pid, "with", signal)
+                info ("Stopping", self._image_name, "PID",self._proc.pid, "with", signal_)
 
                 for child in children:
                     info (" + child process ", child.pid)
 
                     # The process might have gotten an exit status by now so check again to avoid negative exit
-                    if (not self._proc.poll()):
-                        subprocess.call(["sudo", "kill", signal, str(child.pid)])
+                    if not self._proc.poll():
+                        subprocess.call(["sudo", "kill", signal_, str(child.pid)])
 
             # Wait for termination (avoids the need to reset the terminal etc.)
             self.wait()
@@ -324,13 +353,16 @@ class solo5(hypervisor):
         return self
 
     def wait(self):
-        if (self._proc): self._proc.wait()
+        """ wait for self._proc """
+        if self._proc:
+            self._proc.wait()
         return self
 
     def read_until_EOT(self):
+        """ read from stdout until EOT """
         chars = ""
 
-        while (not self._proc.poll()):
+        while not self._proc.poll():
             char = self._proc.stdout.read(1)
             if char == chr(4):
                 return chars
@@ -340,61 +372,49 @@ class solo5(hypervisor):
 
 
     def readline(self):
+        """ read from stdout """
         if self._proc.poll():
             raise Exception("Process completed")
         return self._proc.stdout.readline().decode("utf-8", errors="replace")
 
 
     def writeline(self, line):
+        """ write to stdin """
         if self._proc.poll():
             raise Exception("Process completed")
         return self._proc.stdin.write(line + "\n")
 
     def poll(self):
+        """ poll _proc """
         return self._proc.poll()
 
 class solo5_hvt(solo5):
+    """ solo5 hvt interface """
     def __init__(self, config):
-        super(solo5_hvt, self).__init__(config)
-
-    def name(self):
-        return "Solo5-hvt"
-
-    def boot(self, multiboot, debug=False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
-        self._allow_sudo = allow_sudo
-        self._enable_kvm = enable_kvm
-        solo5_bin = "solo5-hvt"
-        super(solo5_hvt, self).boot(solo5_bin, multiboot, debug, kernel_args, image_name)
+        super().__init__(Solo5Tender.hvt, config)
 
 class solo5_spt(solo5):
+    """ solo5 spt interface """
     def __init__(self, config):
-        super(solo5_spt, self).__init__(config)
+        super().__init__(Solo5Tender.spt, config)
 
-    def name(self):
-        return "Solo5-spt"
-
-    def boot(self, multiboot, debug=False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
-        self._allow_sudo = allow_sudo
-        self._enable_kvm = enable_kvm
-        solo5_bin = "solo5-spt"
-        super(solo5_spt, self).boot(solo5_bin, multiboot, debug, kernel_args, image_name)
-
-
-# Qemu Hypervisor interface
 class qemu(hypervisor):
+    """ Qemu Hypervisor interface """
 
     def __init__(self, config):
-        super(qemu, self).__init__(config)
+        super().__init__(config)
         self._proc = None
         self._stopped = False
         self._sudo = False
         self._image_name = self._config if "image" in self._config else self.name() + " vm"
         self.m_drive_no = 0
 
+        self._kvm_present = False # Set when KVM detected
+
         # TODO: Consider regex expecting a version number here
         self._bios_signature = "SeaBIOS (version"
         self._past_bios = False
-        self._reboots = 0;
+        self._reboots = 0
 
         # Pretty printing
         self.info = Logger(color.INFO("<" + type(self).__name__ + ">"))
@@ -406,6 +426,7 @@ class qemu(hypervisor):
         return self._image_name
 
     def drive_arg(self, filename, device = "virtio", drive_format = "raw", media_type = "disk"):
+        """ create the drive/device arguments based on the configuration """
         names = {"virtio" : "virtio-blk",
                  "virtio-scsi" : "virtio-scsi",
                  "ide"    : "piix3-ide",
@@ -417,26 +438,27 @@ class qemu(hypervisor):
                     + ",format=" + drive_format
                     + ",if=" + device
                     + ",media=" + media_type]
-        else:
-            if device in names:
-                device = names[device]
 
-            driveno = "drv" + str(self.m_drive_no)
-            self.m_drive_no += 1
-            return ["-drive", "file=" + filename + ",format=" + drive_format
-                            + ",if=none" + ",media=" + media_type + ",id=" + driveno,
-                    "-device",  device + ",drive=" + driveno +",serial=foo"]
+        # Get device name if present, if not use the old name as default
+        device = names.get(device, device)
+
+        driveno = "drv" + str(self.m_drive_no)
+        self.m_drive_no += 1
+        return ["-drive", "file=" + filename + ",format=" + drive_format
+                        + ",if=none" + ",media=" + media_type + ",id=" + driveno,
+                "-device",  device + ",drive=" + driveno +",serial=foo"]
 
     # -initrd "file1 arg=foo,file2"
     # This syntax is only available with multiboot.
 
     def mod_args(self, mods):
+        """ creates modules argument for hypervisor """
         mods_list =",".join([mod["path"] + ((" " + mod["args"]) if "args" in mod else "")
                              for mod in mods])
         return ["-initrd", mods_list]
 
     def net_arg(self, backend, device, if_name = "net0", mac = None, bridge = None, scripts = None):
-
+        """ creates network argument for hypervisor """
         if scripts:
             qemu_ifup = scripts + "qemu-ifup"
             qemu_ifdown = scripts + "qemu-ifdown"
@@ -447,8 +469,8 @@ class qemu(hypervisor):
         # FIXME: this needs to get removed, e.g. fetched from the schema
         names = {"virtio" : "virtio-net", "vmxnet" : "vmxnet3", "vmxnet3" : "vmxnet3"}
 
-        if device in names:
-            device = names[device]
+        # Get device name if present, if not use the old name as default
+        device = names.get(device, device)
 
         # Network device - e.g. host side of nic
         netdev = backend + ",id=" + if_name
@@ -462,7 +484,7 @@ class qemu(hypervisor):
 
             netdev += ",script=" + qemu_ifup + ",downscript=" + qemu_ifdown
 
-        if backend == "bridge" and bridge == None:
+        if backend == "bridge" and bridge is None:
             bridge = "bridge43"
 
         if bridge:
@@ -473,18 +495,20 @@ class qemu(hypervisor):
         device += ",netdev=" + if_name
 
         # Add mac-address if specified
-        if mac: device += ",mac=" + mac
+        if mac:
+            device += ",mac=" + mac
         device += ",romfile=" # remove some qemu boot info (experimental)
 
         return ["-device", device,
                 "-netdev", netdev]
 
     def kvm_present(self):
-        if (not self._enable_kvm):
+        """ returns true if KVM is present and available """
+        if not self._enable_kvm:
             self.info("KVM OFF")
             return False
 
-        if (not self._allow_sudo):
+        if not self._allow_sudo:
             raise Exception("KVM is enabled, which requires sudo, but sudo is not enabled")
 
         command = "egrep -m 1 '^flags.*(vmx|svm)' /proc/cpuinfo"
@@ -493,13 +517,14 @@ class qemu(hypervisor):
             self.info("KVM ON")
             return True
 
-        except Exception as err:
+        except Exception:
             self.info("KVM OFF")
             return False
 
     # Check if we should use the hvf accel (MacOS only)
     def hvf_present(self):
-        return (platform.system() == "Darwin")
+        """ returns true if Hypervisor.framework is available (Darwin/mac only) """
+        return platform.system() == "Darwin"
 
     # Start a process and preserve in- and output pipes
     # Note: if the command failed, we can't know until we have exit status,
@@ -507,9 +532,12 @@ class qemu(hypervisor):
     # is therefore deferred to the callee
 
     def get_final_output(self):
+        """ get final output from hypervisor process """
         return self._proc.communicate()
 
-    def boot(self, multiboot, debug = False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
+    def boot_in_hypervisor(self, multiboot=True, debug = False, kernel_args = "", image_name = None, allow_sudo = False, enable_kvm = False):
+        """" boot VM in hypervisor """
+
         self._allow_sudo = allow_sudo
         self._enable_kvm = enable_kvm
         self._stopped = False
@@ -538,18 +566,19 @@ class qemu(hypervisor):
         if multiboot:
 
             # TODO: Remove .img-extension from vm.json in tests to avoid this hack
-            if (image_name.endswith(".img")):
+            if image_name.endswith(".img"):
                 image_name = image_name.split(".")[0]
 
-            if not kernel_args: kernel_args = "\"\""
+            if not kernel_args:
+                kernel_args = "\"\""
 
             info ("File magic: ", file_type(image_name))
 
             if is_Elf64(image_name):
                 info ("Found 64-bit ELF, need chainloader" )
                 print("Looking for chainloader: ")
-                if chainloader == None or not os.path.isfile(chainloader):
-                    print(f"Error: couldn't find chainloader. Try -g for grub, or create an .img with vmbuild.")
+                if chainloader is None or not os.path.isfile(chainloader):
+                    print("Error: couldn't find chainloader. Try -g for grub, or create an .img with vmbuild.")
                     sys.exit(1)
 
                 print("Found", chainloader, "Type: ",  file_type(chainloader))
@@ -677,16 +706,16 @@ class qemu(hypervisor):
 
     def stop(self):
 
-        signal = "-SIGTERM"
+        signal_ = "-SIGTERM"
 
         # Don't try to kill twice
         if self._stopped:
             self.wait()
             return self
-        else:
-            self._stopped = True
 
-        if self._proc and self._proc.poll() == None :
+        self._stopped = True
+
+        if self._proc and self._proc.poll() is None :
 
             if not self._sudo:
                 info ("Stopping child process (no sudo required)")
@@ -696,14 +725,14 @@ class qemu(hypervisor):
                 parent = psutil.Process(self._proc.pid)
                 children = parent.children()
 
-                info ("Stopping", self._image_name, "PID",self._proc.pid, "with", signal)
+                info ("Stopping", self._image_name, "PID",self._proc.pid, "with", signal_)
 
                 for child in children:
                     info (" + child process ", child.pid)
 
                     # The process might have gotten an exit status by now so check again to avoid negative exit
-                    if (not self._proc.poll()):
-                        subprocess.call(["sudo", "kill", signal, str(child.pid)])
+                    if not self._proc.poll():
+                        subprocess.call(["sudo", "kill", signal_, str(child.pid)])
 
             # Wait for termination (avoids the need to reset the terminal etc.)
             self.wait()
@@ -711,13 +740,16 @@ class qemu(hypervisor):
         return self
 
     def wait(self):
-        if (self._proc): self._proc.wait()
+        """ wait for hypervisor process to exit """
+        if self._proc:
+            self._proc.wait()
         return self
 
     def read_until_EOT(self):
+        """ read output from hypervisor until EOT character found """
         chars = ""
 
-        while (not self._proc.poll()):
+        while not self._proc.poll():
             char = self._proc.stdout.read(1).decode("utf-8", errors="replace")
             if char == chr(4):
                 return chars
@@ -742,7 +774,7 @@ class qemu(hypervisor):
         # cleaning control chars using regexes below, but for now the cheapest seems to be
         # plain string matching.
         #
-        if (not filter_all_control_chars):
+        if not filter_all_control_chars:
             line = self._proc.stdout.readline().decode("utf-8", errors="replace")
 
             # Known control sequences to be trimmed
@@ -808,22 +840,29 @@ class qemu(hypervisor):
 
 
     def writeline(self, line):
+        """ write line to hypervisor stdin """
         if self._proc.poll():
             raise Exception("Process completed")
         return self._proc.stdin.write(line + "\n")
 
     def poll(self):
+        """ poll hypervisor process for output """
         return self._proc.poll()
 
 # VM class
-class vm(object):
+class vm:
+    """ VM management class """
 
     def __init__(self, config = None, hyper_name = "qemu"):
+        """ initialise VM config with specified hypervisor """
 
         self._stopping = False
         self._exit_status = None
         self._exit_msg = ""
         self._exit_complete = False
+
+        self._allow_sudo = False # Set by boot()
+        self._enable_kvm = False # Set by boot()
 
         self._config = load_with_default_config(True, config)
         self._on_success = lambda line : self.exit(exit_codes["SUCCESS"], nametag + " All tests passed")
@@ -835,13 +874,15 @@ class vm(object):
             "FATAL: Random source check failed" : self._on_unsafe,
             "SUCCESS" : self._on_success }
 
-        if hyper_name == "solo5":
-            hyper = solo5
+        if hyper_name == "solo5-spt":
+            hyper = solo5_spt
+        elif hyper_name == "solo5-hvt":
+            hyper = solo5_hvt
         else:
             hyper = qemu
 
         # Initialize hypervisor with config
-        assert(issubclass(hyper, hypervisor))
+        assert issubclass(hyper, hypervisor)
         self._hyper  = hyper(self._config)
         self._timeout_after = None
         self._timer = None
@@ -850,7 +891,8 @@ class vm(object):
         self._root = os.getcwd()
         self._kvm_present = False
 
-    def stop(self, signal = None):
+    def stop(self):
+        """ stop hypervisor """
         self.flush()
         self._hyper.stop().wait()
         if self._timer:
@@ -858,41 +900,43 @@ class vm(object):
         return self
 
     def flush(self):
-        if self._hyper._proc == None:
+        """ read and output remaining lines from hypervisor """
+        if not self._hyper.has_process():
             return
 
-        while self._exit_status == None and self.poll() == None:
+        while self._exit_status is None and self.poll() is None:
+            try:
+                line = self._hyper.readline()
+            except Exception as e:
+                # We might be blocked on self._hyper.readline() when a signal handler tells us to stop
+                # because it stops us by sending sigterm to the parent process and all children.
+                # In that case an exception is expected, but not otherwise.
+                if signal is None:
+                    print(color.WARNING(f"Exception thrown while waiting for vm output: {e}"))
+                break
 
-                try:
-                    line = self._hyper.readline()
-                except Exception as e:
-                    # We might be blocked on self._hyper.readline() when a signal handler tells us to stop
-                    # because it stops us by sending sigterm to the parent process and all children.
-                    # In that case an exception is expected, but not otherwise.
-                    if signal == None:
-                        print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
-                    break
+            if line and (self.find_exit_status(line) is None):
+                print(color.VM(line.rstrip()))
+                self.trigger_event(line)
 
-                if line and self.find_exit_status(line) == None:
-                        print(color.VM(line.rstrip()))
-                        self.trigger_event(line)
-
-                # Empty line - should only happen if process exited
-                else: pass
+            # Empty line - should only happen if process exited
+            else:
+                pass
 
 
     def wait(self):
+        """ wait """
         if hasattr(self, "_timer") and self._timer:
             self._timer.join()
         self._hyper.wait()
         return self._exit_status
 
     def poll(self):
+        """ poll """
         return self._hyper.poll()
 
-    # Stop the VM with exit status / msg.
-    # set keep_running to indicate that the program should continue
     def exit(self, status, msg, keep_running = False):
+        """ Stop the VM with exit status / msg. Set keep_running to indicate that the program should continue """
 
         # Exit may have been called allready
         if self._exit_complete:
@@ -929,17 +973,18 @@ class vm(object):
         self._exit_complete = True
         program_exit(status, msg)
 
-    # Default timeout event
     def timeout(self):
-        if VERB: print(color.INFO("<timeout>"), "VM timed out")
+        """ Default timeout event """
+        if VERB:
+            print(color.INFO("<timeout>"), "VM timed out")
 
         # Note: we have to stop the VM since the main thread is blocking on vm.readline
         self._exit_status = exit_codes["TIMEOUT"]
         self._exit_msg = "vmrunner timed out after " + str(self._timeout_after) + " seconds"
         self._hyper.stop().wait()
 
-    # Default panic event
-    def panic(self, panic_line):
+    def panic(self, _):
+        """ Default panic event """
         panic_reason = self._hyper.readline()
         info("VM signalled PANIC. Reading until EOT (", hex(ord(EOT)), ")")
         print(color.VM(panic_reason), end=' ')
@@ -952,42 +997,51 @@ class vm(object):
 
     # Events - subscribable
     def on_output(self, output, callback):
+        """ register on_output callback """
         self._on_output[ output ] = callback
         return self
 
     def on_success(self, callback, do_exit = True):
+        """ register on_success callback """
         if do_exit:
             self._on_output["SUCCESS"] = lambda line : [callback(line), self._on_success(line)]
-        else: self._on_output["SUCCESS"] = callback
+        else:
+            self._on_output["SUCCESS"] = callback
         return self
 
     def on_panic(self, callback, do_exit = True):
+        """ register on_panic callback """
         if do_exit:
             self._on_output[panic_signature] = lambda line : [callback(line), self._on_panic(line)]
-        else: self._on_output[panic_signature] = callback
+        else:
+            self._on_output[panic_signature] = callback
         return self
 
     def on_timeout(self, callback):
+        """ register on_timeout callback """
         self._on_timeout = callback
         return self
 
     def on_exit_success(self, callback):
+        """ register on_exit_success callback """
         self._on_exit_success = callback
         return self
 
     def on_exit(self, callback):
+        """ register on_exit callback """
         self._on_exit = callback
         return self
 
-    # Read a line from the VM's standard out
     def readline(self):
+        """ Read a line from the VM's standard out """
         return self._hyper.readline()
 
-    # Write a line to VM stdout
     def writeline(self, line):
+        """ Write a line to VM stdout """
         return self._hyper.writeline(line)
 
     def find_exit_status(self, line):
+        """ find exit status on output line """
 
         # Kernel reports service exit status
         if (line.startswith("     [ Kernel ] service exited with status") or
@@ -1005,27 +1059,27 @@ class vm(object):
         return None
 
     def trigger_event(self, line):
-        # Find any callback triggered by this line
+        """ Find any callback triggered by this line """
         for pattern, func in self._on_output.items():
             if re.search(pattern, str(line)):
                 try:
                     # Call it
                     res = func(line)
-                except Exception as err:
+                except Exception:
                     print(color.WARNING("Exception raised in event callback: "))
                     print_exception()
                     res = False
                     self.stop()
 
                 # NOTE: Result can be 'None' without problem
-                if res == False:
+                if res is False:
                     self._exit_status = exit_codes["CALLBACK_FAILED"]
                     self.exit(self._exit_status, " Event-triggered test failed")
 
 
-    # Boot the VM and start reading output. This is the main event loop.
     def boot(self, timeout = 60, multiboot = True, debug = False, kernel_args = "booted with vmrunner",
              image_name = None, allow_sudo = False, enable_kvm = False):
+        """ Boot the VM and start reading output. This is the main event loop. """
         info ("VM boot, timeout: ", timeout, "multiboot: ", multiboot, "Kernel_args: ", kernel_args,
               "image_name: ", image_name, allow_sudo, "allow_sudo")
 
@@ -1038,47 +1092,49 @@ class vm(object):
         self._timeout_after = timeout
 
         # Start the timeout thread
-        if (timeout):
+        if timeout:
             info("setting timeout to",timeout,"seconds")
             self._timer = threading.Timer(timeout, self._on_timeout)
             self._timer.start()
 
         # Boot via hypervisor
         try:
-            self._hyper.boot(multiboot, debug, kernel_args, image_name, allow_sudo, enable_kvm)
+            self._hyper.boot_in_hypervisor(multiboot, debug, kernel_args, image_name, allow_sudo, enable_kvm)
         except Exception as err:
             print(color.WARNING("Exception raised while booting: "))
             print_exception()
-            if (timeout): self._timer.cancel()
+            if timeout:
+                self._timer.cancel()
             self.exit(exit_codes["BOOT_FAILED"], str(err))
 
         # Start analyzing output
-        while self._exit_status == None and self.poll() == None:
+        while self._exit_status is None and self.poll() is None:
 
             try:
                 line = self._hyper.readline()
             except Exception as e:
-                print(color.WARNING("Exception thrown while waiting for vm output: %s" % e))
+                print(color.WARNING(f"Exception thrown while waiting for vm output: {e}"))
                 break
 
-            if line and self.find_exit_status(line) == None:
+            if line and (self.find_exit_status(line) is None):
                 print(color.VM(line.rstrip()))
                 self.trigger_event(line)
 
             # Empty line - should only happen if process exited
-            else: pass
+            else:
+                pass
 
 
         # VM Done
         info("Event loop done. Exit status:", self._exit_status, "poll:", self.poll())
 
         # If the VM process didn't exit by now we need to stop it.
-        if (self.poll() == None):
+        if self.poll() is None:
             self.stop()
 
         # Process may have ended without EOT / exit message being read yet
         # possibly normal vm shutdown
-        if self.poll() != None:
+        if self.poll() is not None:
 
             info("No poll - getting final output")
             try:
@@ -1095,11 +1151,11 @@ class vm(object):
                     self.find_exit_status(line)
                     # Note: keep going. Might find panic after service exit
 
-            except Exception as e:
+            except Exception:
                 pass
 
         # We should now have an exit status, either from a callback or VM EOT / exit msg.
-        if self._exit_status != None:
+        if self._exit_status is not None:
             info("VM has exit status. Exiting.")
             self.exit(self._exit_status, self._exit_msg)
         else:
@@ -1108,12 +1164,12 @@ class vm(object):
         # If everything went well we can return
         return self
 
-# Fallback to default
 def load_with_default_config(use_default, path = default_json):
+    """ load user config, optionally return defaults with user specified values modified """
 
     # load default config
     conf = {}
-    if use_default == True:
+    if use_default:
         info("Loading default config.")
         conf = load_config(default_config)
 
@@ -1121,28 +1177,26 @@ def load_with_default_config(use_default, path = default_json):
     user_conf = load_config(path)
 
     if user_conf:
-        if use_default == False:
+        if not use_default:
             # return user_conf as is
             return user_conf
-        else:
-            # extend (override) default config with user config
-            for key, value in user_conf.items():
-                conf[key] = value
-            info(str(conf))
-            return conf
-    else:
-        return conf
 
-    program_exit(73, "No config found. Try enable default config.")
+        # extend (override) default config with user config
+        for key, value in user_conf.items():
+            conf[key] = value
+        info(str(conf))
 
-# Load a vm config.
+    return conf
+
 def load_config(path):
+    """ Load a vm config """
 
     config = {}
     description = None
 
     # If path is explicitly "None", try current dir
-    if not path: path = default_json
+    if not path:
+        path = default_json
 
     info("Trying to load config from", path)
 
@@ -1180,19 +1234,19 @@ def load_config(path):
 
 
 def program_exit(status, msg):
-    global vms
+    """ print message, stop VMs and exit program with specified exit code """
 
     info("Program exit called with status", status, "(",get_exit_code_name(status),")")
     info("Stopping all vms")
 
-    for vm in vms:
-        vm.stop(status).wait()
+    for vm_ in vms:
+        vm_.stop().wait()
 
     # Print status message and exit with appropriate code
-    if (get_exit_code_name(status) == "UNSAFE"):
+    if get_exit_code_name(status) == "UNSAFE":
         print(color.WARNING("Do not rely on this image for secure applications."))
         status = 0
-    if (status != 0):
+    if status != 0:
         print(color.EXIT_ERROR(get_exit_code_name(status), msg))
     else:
         print(color.SUCCESS(msg))
@@ -1200,18 +1254,18 @@ def program_exit(status, msg):
     sys.exit(status)
 
 
-# Call this to add a new vm to the vms list as well. This ensures proper termination
 def add_vm(**kwargs):
+    """ Call this to add a new vm to the vms list as well. This ensures proper termination """
     new_vm = vm(**kwargs)
     vms.append(new_vm)
     return new_vm
 
-# Handler for signals
-def handler(signum, frame):
-    print(color.WARNING("Process interrupted - stopping vms"))
-    for vm in vms:
+def handler(signum, _):
+    """ Handler for signals """
+    print(color.WARNING(f"Process interrupted by signal {signum} - stopping vms"))
+    for vm_ in vms:
         try:
-            vm.exit(exit_codes["ABORT"], "Process terminated by user")
+            vm_.exit(exit_codes["ABORT"], "Process terminated by user")
         except Exception as e:
             print(color.WARNING("Forced shutdown caused exception: "), e)
             raise e
