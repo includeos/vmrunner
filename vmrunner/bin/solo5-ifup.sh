@@ -24,12 +24,12 @@
 # The name of the bridge VM's are added to
 BRIDGE=bridge43
 
-if [ $(id -u) -ne 0 ]; then
+if [ "$(id -u)" -ne 0 ]; then
     echo "$0: must be root" 1>&2
     exit 1
 fi
 
-case `uname -s` in
+case $(uname -s) in
 Linux)
     if ip tuntap | grep -q tap100; then
         echo "tap100 already exists"

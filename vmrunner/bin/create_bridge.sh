@@ -6,6 +6,8 @@ set -e
 # Mac still only supports ifconfig
 if uname -s | grep Darwin > /dev/null 2>&1; then
   on_mac=true
+else
+  on_mac=false
 fi
 
 ####################
@@ -29,31 +31,31 @@ function output() {
   printf ">>> %s\n" "$1"
 }
 function verify_command() {
-  command -v $1 >/dev/null 2>&1 || { echo >&2 "I require $1 but it's not installed.  Aborting."; exit 1; }
+  command -v "$1" >/dev/null 2>&1 || { echo >&2 "I require $1 but it's not installed.  Aborting."; exit 1; }
 }
 function bridge_check_existing() {
-  if [ $on_mac ]; then
+  if "$on_mac"; then
     ifconfig $BRIDGE > /dev/null 2>&1
   else
     ip link show $BRIDGE > /dev/null 2>&1
   fi
 }
 function bridge_create() {
-  if [ $on_mac ]; then
+  if "$on_mac"; then
     sudo ifconfig $BRIDGE create > /dev/null
   else
     sudo ip link add $BRIDGE type bridge > /dev/null
   fi
 }
 function bridge_activate() {
-  if [ $on_mac ]; then
+  if "$on_mac"; then
     sudo ifconfig $BRIDGE up
   else
     sudo ip link set $BRIDGE up
   fi
 }
 function bridge_check_configured() {
-  if [ $on_mac ]; then
+  if "$on_mac"; then
     ifconfig $BRIDGE | grep -q $HWADDR
   else
     # TODO: finish
@@ -61,7 +63,7 @@ function bridge_check_configured() {
   fi
 }
 function bridge_configure_ipv4() {
-  if [ $on_mac ]; then
+  if "$on_mac"; then
     sudo ifconfig $BRIDGE $GATEWAY/$NETMASK
     sudo ifconfig $BRIDGE ether $HWADDR
   else
@@ -70,8 +72,8 @@ function bridge_configure_ipv4() {
   fi
 }
 function bridge_configure_ipv6() {
-  if [ $on_mac ]; then
-    if [[ ! $(ifconfig $BRIDGE | grep $GATEWAY6) ]]; then
+  if "$on_mac"; then
+    if ! ifconfig $BRIDGE | grep -q $GATEWAY6; then
       sudo ifconfig $BRIDGE inet6 add $GATEWAY6/$NETMASK6
       sudo ifconfig $BRIDGE ether $HWADDR
     fi
@@ -81,7 +83,7 @@ function bridge_configure_ipv6() {
   fi
 }
 function routes_number() {
-  if [ $on_mac ]; then
+  if "$on_mac"; then
     echo netstat -rnv | grep -c $NETWORK
   else
     echo ip route | grep -c $NETWORK
@@ -92,7 +94,7 @@ function routes_number() {
 # Setup logic. Configures the bridge the same for both commands.
 ####################
 output "Setting up bridge: $BRIDGE, ipv4: $GATEWAY/$NETMASK, ipv6: $GATEWAY6/$NETMASK6"
-if [ $on_mac ]; then
+if "$on_mac"; then
   verify_command ifconfig
   output "Running on Mac using ifconfig"
 else

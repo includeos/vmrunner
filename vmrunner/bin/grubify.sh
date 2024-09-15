@@ -46,7 +46,7 @@ shift $((OPTIND-1))
 [[ $1 ]] || usage
 
 KERNEL=$1
-DISK=$(basename ${DISK-$KERNEL.grub.img})
+DISK=$(basename "${DISK-$KERNEL.grub.img}")
 MOUNTDIR=${MOUNTDIR-/mnt}
 MOUNT_OPTS="rw"
 
@@ -63,36 +63,36 @@ function unmount {
   # Unmount by consecutive calls to command below.
 
   echo -e ">>> Unmounting and detaching $LOOP"
-  sudo umount -vd $MOUNTDIR || :
+  sudo umount -vd "$MOUNTDIR" || :
 
 }
 
 function clean {
   echo ">>> Removing previous $DISK"
-  rm -f $DISK
+  rm -f "$DISK"
 }
 
 
 function create_disk {
 
-  if [ -f $DISK ]
+  if [ -f "$DISK" ]
   then
     echo -e ">>> $DISK allready exists. Preserving existing image as $DISK.bak"
-    mv $DISK $DISK.bak
+    mv "$DISK" "$DISK".bak
   fi
 
   # Kernel size in Kb
-  KERN_KB=$(( ($(stat -c%s "$KERNEL") / 1024) ))
+  KERN_KB=$(( $(stat -c%s "$KERNEL") / 1024 ))
 
   # Estimate some overhead for the FAT
-  FAT_KB=$(( ($KERN_KB + $BASE_KB) / 10 ))
+  FAT_KB=$(( (KERN_KB + BASE_KB) / 10 ))
 
-  DISK_KB=$(( $KERN_KB + $BASE_KB + $FAT_KB ))
+  DISK_KB=$(( KERN_KB + BASE_KB + FAT_KB ))
 
   echo ">>> Estimated disk size: $BASE_KB Kb Base size + $KERN_KB Kb kernel + $FAT_KB Kb FAT = $DISK_KB Kb"
   echo ">>> Creating FAT file system on $DISK"
 
-  mkfs.fat -C $DISK $DISK_KB
+  mkfs.fat -C "$DISK" $DISK_KB
 }
 
 function mount_loopback {
@@ -105,17 +105,17 @@ function mount_loopback {
   # losetup -a
 
   # Associate loopback with disk file
-  sudo losetup $LOOP $DISK
+  sudo losetup "$LOOP" "$DISK"
 
   echo -e ">>> Mounting ($MOUNT_OPTS)  $DISK in $MOUNTDIR"
-  mkdir -p $MOUNTDIR
-  sudo mount -o $MOUNT_OPTS $LOOP $MOUNTDIR
+  mkdir -p "$MOUNTDIR"
+  sudo mount -o $MOUNT_OPTS "$LOOP" "$MOUNTDIR"
 
 }
 
 function copy_kernel {
   echo ">>> Copying kernel '$KERNEL' to $MOUNTDIR/boot/includeos_service"
-  sudo cp $KERNEL $MOUNTDIR/boot/includeos_service
+  sudo cp "$KERNEL" "$MOUNTDIR"/boot/includeos_service
   sync
 }
 
@@ -160,11 +160,11 @@ create_disk
 mount_loopback
 
 echo -e ">>> Creating boot dir"
-sudo mkdir -p $MOUNTDIR/boot
+sudo mkdir -p "$MOUNTDIR"/boot
 
 
 echo -e ">>> Populating boot dir with grub config"
-sudo mkdir -p $MOUNTDIR/boot/grub
+sudo mkdir -p "$MOUNTDIR"/boot/grub
 
 
 GRUB_CFG='
@@ -181,23 +181,23 @@ menuentry IncludeOS {
 if [[ ! -e grub.cfg ]]
 then
   echo -e ">>> Creating grub config file"
-  sudo echo "$GRUB_CFG" > grub.cfg
-  sudo mv grub.cfg $MOUNTDIR/boot/grub/grub.cfg
+  echo "$GRUB_CFG" > grub.cfg
+  sudo mv grub.cfg "$MOUNTDIR"/boot/grub/grub.cfg
 else
   echo -e ">>> Copying grub config file"
-  sudo cp grub.cfg $MOUNTDIR/boot/grub/grub.cfg
+  sudo cp grub.cfg "$MOUNTDIR"/boot/grub/grub.cfg
 fi
 
 copy_kernel
 
 # EFI?
-sudo mkdir -p $MOUNTDIR/boot/efi
+sudo mkdir -p "$MOUNTDIR"/boot/efi
 
 
 ARCH=${ARCH-i386}
 TARGET=i386-pc
 echo -e ">>> Running grub install for target $TARGET"
-sudo grub-install --target=$TARGET --force --boot-directory $MOUNTDIR/boot/ $LOOP
+sudo grub-install --target=$TARGET --force --boot-directory "$MOUNTDIR"/boot/ "$LOOP"
 
 echo -e ">>> Synchronize file cache"
 sync
