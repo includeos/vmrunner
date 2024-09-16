@@ -1,10 +1,1 @@
-{
-  "description" : "Single virtio nic with vanilla cpu features. Expects an ethernet bridge to be configured.",
-  "net" : [
-    {
-      "device" : "virtio",
-      "backend" : "bridge",
-      "bridge" : "bridge43"
-    }
-  ]
-}
+{}
