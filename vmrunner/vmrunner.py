@@ -29,19 +29,33 @@ from .prettify import color
 
 package_path = os.path.dirname(os.path.realpath(__file__))
 
-#TODO CHECK AND VERIFY
-INCLUDEOS_VMRUNNER = os.environ['INCLUDEOS_VMRUNNER']
+# Use INCLUDEOS_VMRUNNER from environment if set, otherwise get from package metadata
+INCLUDEOS_VMRUNNER = os.environ.get('INCLUDEOS_VMRUNNER', None)
+if INCLUDEOS_VMRUNNER is None:
+    from importlib.metadata import files
+    for p_ in files('vmrunner'):
+        if '__init__.py' in str(p_):
+            INCLUDEOS_VMRUNNER=os.path.dirname(os.path.realpath(p_.locate()))
 
-default_config = INCLUDEOS_VMRUNNER  + "/vmrunner/vm.userspace.json"
+assert INCLUDEOS_VMRUNNER is not None
+
+default_config = INCLUDEOS_VMRUNNER  + "/vm.userspace.json"
 
 default_json = "./vm.json"
-#TODO check and verify only when needed
-chainloader = os.environ.get('INCLUDEOS_CHAINLOADER')
 
-if chainloader:
+# Use INCLUDEOS_CHAINLOADER from environment if set, otherwise look for nix propagatedBuildInputs
+chainloader = os.environ.get('INCLUDEOS_CHAINLOADER', None)
+if chainloader is None:
+    propagatedBuildInputs = os.environ.get('propagatedBuildInputs', None)
+    if propagatedBuildInputs is not None:
+        for c_path in propagatedBuildInputs.split(' '):
+            chainloader_candidate = c_path + "/bin/chainloader"
+            if os.path.isfile(chainloader_candidate):
+                chainloader = c_path + "/bin"
+                break
+
+if chainloader is not None:
     chainloader = chainloader + "/chainloader"
-else:
-    chainloader = None
 
 # Provide a list of VM's with validated specs
 # (One default vm added at the end)

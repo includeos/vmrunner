@@ -13,12 +13,6 @@ import shutil
 
 from vmrunner.prettify import color
 
-# Get the path to INCLUDEOS_VMRUNNER from the environment variable
-includeos_vmrunner = os.environ.get('INCLUDEOS_VMRUNNER')
-if not includeos_vmrunner:
-    print("Error: INCLUDEOS_VMRUNNER environment variable is not set.")
-    sys.exit(1)
-
 # Argparse
 parser = argparse.ArgumentParser(
   description="Boot - Run IncludeOS services")
