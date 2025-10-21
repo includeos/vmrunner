@@ -529,6 +529,9 @@ class qemu(hypervisor):
 
     def init_virtiofs(self, socket, shared, mem):
         """ initializes virtiofs by launching virtiofsd and creating a virtiofs device """
+        if not os.path.exists(shared):
+            raise Exception("Shared directory for VirtioFS does not exist")
+
         virtiofsd_args = ["virtiofsd", "--socket", socket, "--shared-dir", shared, "--sandbox", "none"]
         self._virtiofsd_proc = subprocess.Popen(virtiofsd_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) # pylint: disable=consider-using-with
 
@@ -538,7 +541,7 @@ class qemu(hypervisor):
         info("Successfully started VirtioFSD!")
 
         while not os.path.exists(socket):
-            ...
+            info("Waiting for VirtioFSD socket to show up")
 
         qemu_args = ["-machine", "memory-backend=mem0"]
         qemu_args += ["-chardev", f"socket,id=virtiofsd0,path={socket}"]
