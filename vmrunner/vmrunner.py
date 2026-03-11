@@ -18,6 +18,7 @@ import traceback
 import signal
 import tempfile
 from enum import Enum
+import grp
 import platform
 import psutil
 
@@ -556,8 +557,14 @@ class qemu(hypervisor):
             self.info("KVM OFF")
             return False
 
+
         if not self._allow_sudo:
-            raise Exception("KVM is enabled, which requires sudo, but sudo is not enabled")
+            if "kvm" in (g.gr_name for g in grp.getgrall()):
+                _in_kvm_group = grp.getgrnam("kvm").gr_gid in os.getgroups()
+                if not _in_kvm_group:
+                    raise Exception("KVM was requested, but user is not in the 'kvm' group")
+            else:
+                raise Exception("KVM is enabled, which requires sudo, but sudo is not enabled")
 
         command = "egrep -m 1 '^flags.*(vmx|svm)' /proc/cpuinfo"
         try:
