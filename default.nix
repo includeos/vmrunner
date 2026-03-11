@@ -13,7 +13,6 @@ pkgs.python3.pkgs.buildPythonPackage rec {
   ];
 
   dependencies = with pkgs.python3.pkgs; [
-    future
     jsonschema
     psutil
   ];

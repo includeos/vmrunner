@@ -5,10 +5,6 @@
 
 # pylint: disable=line-too-long, too-many-lines, invalid-name, fixme, broad-exception-raised, broad-exception-caught, too-many-arguments, too-many-branches, too-many-statements, too-many-instance-attributes, too-many-locals
 
-from __future__ import print_function
-from __future__ import absolute_import
-
-
 from builtins import hex
 from builtins import chr
 from builtins import str
