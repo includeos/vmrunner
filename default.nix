@@ -28,6 +28,10 @@ pkgs.python3.pkgs.buildPythonPackage rec {
     license = pkgs.lib.licenses.asl20;
   };
 
+  postInstall = ''
+    install -Dm755 ${create_bridge} $out/bin/${pname}-create-bridge
+  '';
+
   nativeCheckInputs = [
     pkgs.shellcheck
     pkgs.pylint

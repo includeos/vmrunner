@@ -471,7 +471,7 @@ class qemu(hypervisor):
                              for mod in mods])
         return ["-initrd", mods_list]
 
-    def net_arg(self, backend, device, if_name = "net0", mac = None, bridge = None, scripts = None):
+    def net_arg(self, backend, device, if_name = "net0", mac = None, bridge = None, scripts = None, helper = None):
         """ creates network argument for hypervisor """
         if scripts:
             qemu_ifup = scripts + "qemu-ifup"
@@ -503,6 +503,8 @@ class qemu(hypervisor):
 
         if bridge:
             netdev = "bridge,id=" + if_name + ",br=" + bridge
+            if helper:
+                netdev += ",helper=" + helper
 
 
         # Device - e.g. guest side of nic
@@ -699,7 +701,8 @@ class qemu(hypervisor):
                 mac = net["mac"] if "mac" in net else None
                 bridge = net["bridge"] if "bridge" in net else None
                 scripts = net["scripts"] if "scripts" in net else None
-                net_args += self.net_arg(net["backend"], net["device"], "net"+str(i), mac, bridge, scripts)
+                helper = net.get("helper", os.environ.get("QEMU_BRIDGE_HELPER"))
+                net_args += self.net_arg(net["backend"], net["device"], "net"+str(i), mac, bridge, scripts, helper)
                 i+=1
 
         mem_arg = []
