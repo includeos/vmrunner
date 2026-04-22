@@ -9,26 +9,30 @@
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
+
       vmrunner = pkgs.callPackage ./default.nix {};
+
+      vmconfig = import ./vmconfig.nix { inherit pkgs; };
+      boot = import ./boot.nix { inherit pkgs vmrunner; };
+
+      mkBoot = chainloader:
+      { mem ? "128m" }:
+        let
+          cfg = vmconfig.mkConfig { inherit mem; };
+        in
+          boot.mkBoot chainloader { vm = cfg; };
+
     in {
       packages.${system}.default = vmrunner;
 
       devShells.${system}.default = import ./shell.nix { inherit pkgs; };
+
+      lib.${system}.mkBoot = mkBoot;
 
       apps.${system}.default = {
         type = "app";
         program = "${vmrunner}/bin/boot";
       };
 
-      lib.${system}.mkBoot = chainloader: { kvm ? false}: pkgs.symlinkJoin {
-        name = "boot-with-chainloader";
-        paths = [ vmrunner ];
-        buildInputs = [ pkgs.makeWrapper ];
-        postBuild = ''
-          wrapProgram $out/bin/boot \
-            --set INCLUDEOS_CHAINLOADER ${chainloader}/bin/ \
-            ${pkgs.lib.optionalString kvm "--add-flags --kvm"}
-        '';
-      };
     };
 }
