@@ -20,13 +20,14 @@
         program = "${vmrunner}/bin/boot";
       };
 
-      lib.${system}.mkBoot = chainloader: pkgs.symlinkJoin {
+      lib.${system}.mkBoot = chainloader: { kvm ? false}: pkgs.symlinkJoin {
         name = "boot-with-chainloader";
         paths = [ vmrunner ];
         buildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
           wrapProgram $out/bin/boot \
-            --set INCLUDEOS_CHAINLOADER ${chainloader}/bin/
+            --set INCLUDEOS_CHAINLOADER ${chainloader}/bin/ \
+            ${pkgs.lib.optionalString kvm "--add-flags --kvm"}
         '';
       };
     };
