@@ -17,6 +17,11 @@ pkgs.python3.pkgs.buildPythonPackage rec {
     psutil
   ];
 
+  propagatedBuildInputs = [
+    pkgs.file
+    pkgs.qemu
+  ];
+
   create_bridge = ./vmrunner/bin/create_bridge.sh;
 
   passthru = {
